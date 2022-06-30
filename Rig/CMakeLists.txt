@@ -17,9 +17,15 @@ target_include_directories(
 	RIG
 	PRIVATE
 	./include/
+	../Parser/include/
 )
 
 target_link_libraries(RIG
 	PRIVATE
 	Parser
+)
+
+target_compile_definitions(RIG
+	PRIVATE
+	RESOURCES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/resources"
 )

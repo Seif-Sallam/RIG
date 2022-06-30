@@ -1,0 +1,10 @@
+li x0, 10
+
+LABEL: addi x0, x1, 1 # HELLO, WORLD 
+LABEL: sub s0, s0, s2 # ASFASFADFADF A: ASFAF Af a fa FA aff      fad fa    
+
+mul             t1, t2, x0
+
+ADD x1,    x2, 3
+
+sw t3, 0     (x10)
