@@ -1,16 +1,22 @@
 #include "Parser/Parser.h"
-#include "Parser/Token.h"
+#include "RISC/Instruction.h"
+#include "RISC/RegisterFile.h"
+
+#include <math.h>
+#include <stdlib.h>
+#include <stdio.h>
+
 #include <map>
 
-#define MAP_ENTRY(enumName) \
-	{                       \
-		enumName, #enumName \
+#define MAP_ENTRY(type, enumName) \
+	{                             \
+		type::enumName, #enumName \
 	}
 namespace Parser
 {
 
 	Parser::Parser()
-		: m_FileContent(""), m_Tokens(256, {})
+		: m_FileContent("")
 	{
 	}
 
@@ -23,7 +29,9 @@ namespace Parser
 			m_FileContent = std::string(std::istreambuf_iterator<char>(inputFile), std::istreambuf_iterator<char>());
 			inputFile.close();
 			m_FileContent.erase(std::remove(m_FileContent.begin(), m_FileContent.end(), '\r'), m_FileContent.end());
-			SanitizeFileContent();
+			m_ParsableFile = m_FileContent;
+			SanitizeFileContent(m_ParsableFile, true);
+			std::cout << m_ParsableFile << std::endl;
 			return true;
 		}
 		else
@@ -35,9 +43,6 @@ namespace Parser
 	void Parser::CleanParserData()
 	{
 		m_FileContent.clear();
-		for (auto &token : m_Tokens)
-		{
-		}
 	}
 
 	void Parser::PrintFileContent() const
@@ -50,121 +55,497 @@ namespace Parser
 		CleanParserData();
 	}
 
-	void Parser::SanitizeFileContent()
+	void Parser::SanitizeFileContent(std::string &fileContent, bool removeComments)
 	{
 		bool inComment = false;
 		bool foundWhiteSpace = false;
 		bool fonudNewLine = false;
-		for (int i = 0; i < m_FileContent.size(); i++)
+		bool openedParn = false;
+		uint32_t whiteSpaceStart = 0;
+		int32_t startComment = 0;
+		uint32_t endComment = 0;
+		uint32_t newLineCount = 0;
+		char lastCharacter = 0;
+		bool rmEntireLine = false;
+
+		for (uint32_t i = 0; i < fileContent.size(); i++)
 		{
-			char &c = m_FileContent[i];
+			char &c = fileContent[i];
+			char ogC = c;
 			switch (c)
 			{
+			case ')':
+				foundWhiteSpace = false;
+				openedParn = false;
+				break;
+			case '(':
+				if (foundWhiteSpace)
+				{
+					fileContent[whiteSpaceStart] = char(27);
+				}
+				foundWhiteSpace = false;
+				openedParn = true;
+				break;
+			case ',':
+				if (inComment)
+					break;
+				foundWhiteSpace = false;
+				fileContent.insert(fileContent.begin() + i + 1, ' ');
+				break;
 			case '\t':
 				c = ' ';
 				i--;
 				continue;
 				break;
 			case '#':
+				if (!inComment)
+				{
+					startComment = i;
+					if (lastCharacter == '\n' || lastCharacter == 0)
+					{
+
+						rmEntireLine = true;
+					}
+					else if (!foundWhiteSpace)
+					{
+						fileContent.insert(fileContent.begin() + i, ' ');
+						i++;
+					}
+
+					if (foundWhiteSpace)
+						startComment = whiteSpaceStart;
+
+					{
+					}
+				}
 				inComment = true;
+
 				break;
 			case ':':
 				if (inComment)
 					break;
-				m_FileContent.insert(m_FileContent.begin() + i + 1, '\n');
+				if (foundWhiteSpace)
+					fileContent[whiteSpaceStart] = char(27);
+				fileContent.insert(fileContent.begin() + i + 1, '\n');
 				foundWhiteSpace = false;
 				fonudNewLine = false;
+				newLineCount = 0;
 				break;
 			case '\n':
+			{
+				newLineCount++;
+				if (lastCharacter == 0)
+				{
+					c = char(27);
+				}
+				openedParn = false;
 				foundWhiteSpace = false;
+				if (inComment)
+				{
+					if (removeComments)
+					{
+						for (uint32_t index = startComment; index < i; index++)
+							fileContent[index] = char(27);
+						if (rmEntireLine)
+							c = char(27);
+					}
+					rmEntireLine = false;
+				}
+
 				inComment = false;
-				if (fonudNewLine)
+				if (fonudNewLine && newLineCount >= (2 + !removeComments))
 					c = char(27);
 				else
 					fonudNewLine = true;
-				break;
+			}
+			break;
 			case ' ':
+				if (inComment)
+					break;
+				if (openedParn)
+				{
+					c = char(27);
+				}
 				if (foundWhiteSpace || fonudNewLine)
 				{
 					c = char(27);
 					fonudNewLine = false;
+					newLineCount = 0;
+					if (fonudNewLine)
+						whiteSpaceStart = i;
 				}
 				else
-					foundWhiteSpace = true;
+				{
+					whiteSpaceStart = i;
+				}
+				foundWhiteSpace = true;
 				break;
 			default:
 				foundWhiteSpace = false;
 				fonudNewLine = false;
+				newLineCount = 0;
 			}
+			lastCharacter = ogC;
 		}
 
-		auto it = std::remove_if(m_FileContent.begin(), m_FileContent.end(), [](const char &c)
+		auto it = std::remove_if(fileContent.begin(), fileContent.end(), [](const char &c)
 								 { return c == (char)27; });
 
-		m_FileContent.erase(it, m_FileContent.end());
+		fileContent.erase(it, fileContent.end());
 	}
 
-	ErrorMessage Parser::Parse()
+	void Parser::FormatFile()
+	{
+		this->SanitizeFileContent(m_FileContent, false);
+	}
+
+	inline static void GrabLabels(const std::string &section, ParseOutput &output)
 	{
 		std::stringstream ss;
-		ss << m_FileContent;
+		ss << section;
+
 		while (!ss.eof())
 		{
 			std::string line;
-			std::getline(ss, line, '\n');
-			auto delim = FindFirstOfTokens(line);
-			switch (delim.c)
+			std::getline(ss, line);
+
+			uint32_t index = line.find(":");
+
+			if (index != std::string::npos)
 			{
-			case ':':
-				break;
-			case '#':
-				break;
-			case '(':
-				break;
-			case ')':
-				break;
-			case '.':
-				break;
-			case ' ':
-				break;
+				output.labels.push_back(line.substr(0, index));
 			}
 		}
-		return {};
 	}
 
-	const std::string g_Delimnators = ":#(). ";
-
-	Parser::CharacterIndex Parser::FindFirstOfTokens(const std::string &str)
+	inline static void GrabDataSection(const std::string &dataSection, ParseOutput &output)
 	{
-		CharacterIndex ci = {UCHAR_MAX, UINT_MAX};
-		for (int i = 0; i < str.size(); i++)
+		std::stringstream ss;
+		ss << dataSection;
+
+		bool foundDataSection = false;
+		while (!ss.eof())
 		{
-			if (g_Delimnators.find(str[i]) != std::string::npos)
+			std::string line;
+			std::getline(ss, line);
+			// to be implemented after implementing the directives class (data section of the program)
+		}
+	}
+
+	inline static bool IsInteger(char *value)
+	{
+		bool hex = false;
+		bool isBinary = false;
+
+		if (value[0] == '0' && tolower(value[1]) == 'x')
+			hex = true;
+		if (value[0] == '0' && tolower(value[1]) == 'b')
+			isBinary = true;
+
+		uint32_t start = (hex || isBinary) ? 2 : 0;
+
+		for (auto p = value + 2; *p != '\0'; p++)
+		{
+			char c = *p;
+			c = tolower(c);
+			if (isBinary)
 			{
-				ci.c = str[i];
-				ci.index = i;
-				return ci;
+				if (!(c == '0' || c == '1'))
+					return false;
+			}
+			else if (hex == true)
+			{
+				if (!isdigit(c) && (c > 'f' || c < 'a'))
+					return false;
+			}
+			else
+			{
+				if (!isdigit(c))
+					return false;
 			}
 		}
-		return ci;
+		return true;
 	}
+
+	inline static uint32_t GetInteger(char *imm, uint32_t size)
+	{
+		uint32_t sum = 0;
+		uint32_t base = 10;
+		uint32_t pos = 0;
+		bool isHex = false;
+		bool isBinary = false;
+		if (imm[0] == '0' && tolower(imm[1]) == 'x')
+		{
+			base = 16;
+			isHex = true;
+		}
+		if (imm[0] == '0' && tolower(imm[1]) == 'b')
+		{
+			base = 2;
+			isBinary = true;
+		}
+		int32_t start = (isHex || isBinary) ? 2 : 0;
+		for (int32_t i = size - 1; i >= start; i--)
+		{
+			char c = imm[i];
+			if (c == '\0')
+				continue;
+			c = tolower(c);
+
+			uint32_t value = c - '0';
+			if (isHex)
+			{
+				if (isalpha(c))
+					value = c - 'a' + 10;
+			}
+
+			sum += value * pow(base, pos);
+			pos++;
+		}
+
+		return sum;
+	}
+
+	inline static void GrabInstructions(const std::string &textSection, ParseOutput &output)
+	{
+		std::stringstream ss;
+		ss << textSection;
+		uint32_t lineNumber = 0;
+
+		auto &instTypes = Instruction::typeNames;
+
+		while (!ss.eof())
+		{
+			std::string line;
+			std::getline(ss, line);
+			if (line.size() < 4)
+				continue;
+
+			for (auto &c : line)
+				c = toupper(c);
+
+			lineNumber++;
+			uint32_t index = line.find(" ");
+			bool err = false;
+			std::string name = line.substr(0, index);
+			auto it = std::find(instTypes.begin(), instTypes.end(), name);
+
+			if (it != instTypes.end())
+			{
+				Instruction inst(name);
+				inst.lineNumber = lineNumber;
+				auto type = inst.WriteType();
+				char rd[8] = {0}, rs1[8] = {0}, rs2[8] = {0}, imm[16] = {0};
+				switch (type)
+				{
+				case TYPE1: // inst rd, imm
+				{
+					int n = sscanf(line.c_str(), "%*[A-Z] %[A-Za-z0-9], %[A-Za-z0-9]", rd, imm);
+					if (n < 2)
+					{
+						output.err = {ErrorMessage::INVALID_PARAMETERS};
+						return;
+					}
+					std::string rdString = RegisterFile::GetTrueRegName(rd);
+					if (rdString == "INVALID" || !IsInteger(imm))
+					{
+						output.err = {ErrorMessage::INVALID_PARAMETERS};
+						return;
+					}
+					uint32_t finalRD;
+					sscanf(rdString.c_str(), "%*[Xx]%d", &finalRD);
+
+					uint32_t finalIMM = GetInteger(imm, 16);
+					inst.imm = finalIMM;
+					inst.rd = finalRD;
+					output.instructions.push_back(inst);
+				}
+				break;
+				case TYPE2: // inst rd, imm(rs1)
+				{
+					int n = sscanf(line.c_str(), "%*[A-Z] %[A-Za-z0-9], %[A-Za-z0-9](%[A-Za-z0-9])", rd, imm, rs1);
+					if (n < 3)
+					{
+						output.err = {ErrorMessage::INVALID_PARAMETERS};
+						return;
+					}
+					std::string rdString = RegisterFile::GetTrueRegName(rd);
+					std::string rs1String = RegisterFile::GetTrueRegName(rs1);
+					if (rdString == "INVALID" || rs1String == "INVALID" || !IsInteger(imm))
+					{
+						output.err = {ErrorMessage::INVALID_PARAMETERS};
+						return;
+					}
+					uint32_t finalRD, finalRS1;
+					sscanf(rdString.c_str(), "%*[Xx]%d", &finalRD);
+					sscanf(rs1String.c_str(), "%*[Xx]%d", &finalRS1);
+
+					uint32_t finalIMM = GetInteger(imm, 16);
+					inst.imm = finalIMM;
+					inst.rd = finalRD;
+					inst.rs1 = finalRS1;
+					output.instructions.push_back(inst);
+				}
+				break;
+				case TYPE3: // inst rs2, imm(rs1)
+				{
+					int n = sscanf(line.c_str(), "%*[A-Z] %[A-Za-z0-9], %[A-Za-z0-9](%[A-Za-z0-9])", rs2, imm, rs1);
+					if (n < 3)
+					{
+						output.err = {ErrorMessage::INVALID_PARAMETERS};
+						return;
+					}
+					std::string rs1String = RegisterFile::GetTrueRegName(rs1);
+					std::string rs2String = RegisterFile::GetTrueRegName(rs2);
+					if (rs1String == "INVALID" || rs2String == "INVALID" || !IsInteger(imm))
+					{
+						output.err = {ErrorMessage::INVALID_PARAMETERS};
+						return;
+					}
+					uint32_t finalRS1, finalRS2;
+					sscanf(rs1String.c_str(), "%*[Xx]%d", &finalRS1);
+					sscanf(rs2String.c_str(), "%*[Xx]%d", &finalRS2);
+					uint32_t finalIMM = GetInteger(imm, 16);
+
+					inst.rs1 = finalRS1;
+					inst.rs2 = finalRS2;
+					inst.imm = finalIMM;
+					output.instructions.push_back(inst);
+				}
+				break;
+				case TYPE4: // inst rd, rs1, rs2
+				{
+					int n = sscanf(line.c_str(), "%*[A-Z] %[A-Za-z0-9], %[A-Za-z0-9], %[A-Za-z0-9]", rd, rs1, rs2);
+					if (n < 3)
+					{
+						output.err = {ErrorMessage::INVALID_PARAMETERS};
+						return;
+					}
+					std::string rdString = RegisterFile::GetTrueRegName(rd);
+					std::string rs1String = RegisterFile::GetTrueRegName(rs1);
+					std::string rs2String = RegisterFile::GetTrueRegName(rs2);
+					if (rs2String == "INVALID" || rs1String == "INVALID" || rdString == "INVALID")
+					{
+						output.err = {ErrorMessage::INVALID_PARAMETERS};
+						return;
+					}
+					uint32_t finalRD, finalRS1, finalRS2;
+					sscanf(rdString.c_str(), "%*[Xx]%d", &finalRD);
+					sscanf(rs1String.c_str(), "%*[Xx]%d", &finalRS1);
+					sscanf(rs2String.c_str(), "%*[Xx]%d", &finalRS2);
+
+					inst.rd = finalRD;
+					inst.rs1 = finalRS1;
+					inst.rs2 = finalRS2;
+					output.instructions.push_back(inst);
+				}
+				break;
+				case TYPE5: // inst rd, rs1, imm
+				{
+					int n = sscanf(line.c_str(), "%*[A-Z] %[A-Za-z0-9], %[A-Za-z0-9], %[A-Za-z0-9]", rd, rs1, imm);
+					if (n < 3)
+					{
+						output.err = {ErrorMessage::INVALID_PARAMETERS};
+						return;
+					}
+					std::string rdString = RegisterFile::GetTrueRegName(rd);
+					std::string rs1String = RegisterFile::GetTrueRegName(rs1);
+					if (rs1String == "INVALID" || rdString == "INVALID" || !IsInteger(imm))
+					{
+						output.err = {ErrorMessage::INVALID_PARAMETERS};
+						return;
+					}
+					uint32_t finalRD, finalRS1, finalIMM;
+
+					sscanf(rdString.c_str(), "%*[Xx]%d", &finalRD);
+					sscanf(rs1String.c_str(), "%*[Xx]%d", &finalRS1);
+					finalIMM = GetInteger(imm, 16);
+
+					inst.rd = finalRD;
+					inst.rs1 = finalRS1;
+					inst.imm = finalIMM;
+					output.instructions.push_back(inst);
+				}
+				break;
+				case TYPE6: // ecall / fence / ebreak
+				{
+					output.instructions.push_back(inst);
+				}
+				break;
+				case TYPE7: // inst rs1, rs2, imm
+				{
+					int n = sscanf(line.c_str(), "%*[A-Z] %[A-Za-z0-9], %[A-Za-z0-9], %[A-Za-z0-9]", rs1, rs2, imm);
+					if (n < 3)
+					{
+						output.err = {ErrorMessage::INVALID_PARAMETERS};
+						return;
+					}
+					std::string rs1String = RegisterFile::GetTrueRegName(rs1);
+					std::string rs2String = RegisterFile::GetTrueRegName(rs2);
+					if (rs1String == "INVALID" || rs2String == "INVALID" || !IsInteger(imm))
+					{
+						output.err = {ErrorMessage::INVALID_PARAMETERS};
+						return;
+					}
+					uint32_t finalRS2, finalRS1, finalIMM;
+
+					sscanf(rs1String.c_str(), "%*[Xx]%d", &finalRS1);
+					sscanf(rs2String.c_str(), "%*[Xx]%d", &finalRS2);
+					finalIMM = GetInteger(imm, 16);
+
+					inst.rs1 = finalRS1;
+					inst.rs2 = finalRS2;
+					inst.imm = finalIMM;
+					output.instructions.push_back(inst);
+				}
+				break;
+				default: // INVALID
+					output.err = {ErrorMessage::INVALID_INSTRUCTION};
+					return;
+					break;
+				}
+			}
+			else
+				output.err = {ErrorMessage::INVALID_INSTRUCTION};
+		}
+	}
+
+	ParseOutput Parser::Parse()
+	{
+		ParseOutput output;
+
+		std::string textSection = m_ParsableFile;
+		std::string dataSection = m_ParsableFile;
+
+		GrabDataSection(dataSection, output);
+		GrabLabels(m_ParsableFile, output);
+		GrabInstructions(textSection, output);
+		return output;
+	}
+
+	const std::string g_Delimnators = ":#().,";
 
 	const std::map<ErrorMessage::Type, const char *> enumNames{
-		MAP_ENTRY(ErrorMessage::INVALID_INSTRUCTION),
-		MAP_ENTRY(ErrorMessage::INVALID_LABEL),
-		MAP_ENTRY(ErrorMessage::INVALID_PARAMETERS),
-		MAP_ENTRY(ErrorMessage::INVALID_SYMBOL),
-		MAP_ENTRY(ErrorMessage::NO_ERROR),
+		MAP_ENTRY(ErrorMessage,
+				  INVALID_INSTRUCTION),
+		MAP_ENTRY(ErrorMessage,
+				  INVALID_LABEL),
+		MAP_ENTRY(ErrorMessage,
+				  INVALID_PARAMETERS),
+		MAP_ENTRY(ErrorMessage,
+				  INVALID_SYMBOL),
+		MAP_ENTRY(ErrorMessage,
+				  NO_ERROR),
 	};
 
 	std::ostream &operator<<(std::ostream &stream, const ErrorMessage &message)
 	{
-		stream << "Error: " << enumNames.at(message.type) << "\n\tToken: " << message.token->data << '\n';
+		stream << "Error: " << enumNames.at(message.type) << '\n';
 		return stream;
 	}
 
 	ErrorMessage::operator bool()
 	{
-		return type == NO_ERROR;
+		return type != NO_ERROR;
 	}
 }

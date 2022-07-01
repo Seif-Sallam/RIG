@@ -1,4 +1,4 @@
-#include "Parser/RegisterFile.h"
+#include "RISC/RegisterFile.h"
 #define STR(reg) #reg
 
 const std::vector<std::string> RegisterFile::regNamesTrue = {
@@ -40,7 +40,7 @@ const std::vector<std::string> RegisterFile::regNamesAPI = {
 	STR(ra),
 	STR(sp),
 	STR(gp),
-	STR(tp),
+	STR(tP),
 	STR(t0),
 	STR(t1),
 	STR(t2),
@@ -82,27 +82,48 @@ RegisterFile::RegisterFile()
 	for (uint32_t i = 0; i < 32; i++)
 	{
 		m_Regs[i] = 0;
-		trueToApiMap.insert(regNamesTrue[i], regNamesAPI[i]);
-		APIToTrueMap.insert(regNamesAPI[i], regNamesTrue[i]);
+		trueToApiMap.insert(std::make_pair(regNamesTrue[i], regNamesAPI[i]));
+		APIToTrueMap.insert(std::make_pair(regNamesAPI[i], regNamesTrue[i]));
 	}
 }
 
 std::string RegisterFile::GetAPIRegName(const std::string &reg)
 {
 	auto &map = Instance().trueToApiMap;
-	if (auto &it = map.find(reg); it != map.end())
-		return it->second;
+	std::string copy = reg;
+
+	for (auto &c : copy)
+		c = tolower(c);
+	if (RegisterFile::IsRegister(copy) != 0)
+	{
+		if (auto it = map.find(copy); it != map.end())
+			return it->second;
+		else
+			return copy;
+	}
 	else
-		return reg;
+	{
+		return "INVALID";
+	}
 }
 
 std::string RegisterFile::GetTrueRegName(const std::string &reg)
 {
 	auto &map = Instance().APIToTrueMap;
-	if (auto &it = map.find(reg); it != map.end())
-		return it->second;
+	std::string copy = reg;
+	for (auto &c : copy)
+		c = tolower(c);
+	if (RegisterFile::IsRegister(copy))
+	{
+		if (auto it = map.find(copy); it != map.end())
+			return it->second;
+		else
+			return copy;
+	}
 	else
-		return reg;
+	{
+		return "INVALID";
+	}
 }
 
 uint32_t RegisterFile::GetValue(uint32_t index)
@@ -119,4 +140,21 @@ void RegisterFile::SetValue(uint32_t index, uint32_t value)
 		throw "INDEX OUT OF RANGE";
 
 	Instance().m_Regs[index] = value;
+}
+
+int RegisterFile::IsRegister(const std::string &str)
+{
+	std::string copy = str;
+	for (auto &c : copy)
+		c = tolower(c);
+
+	auto &trueVec = Instance().regNamesTrue;
+	auto &apiVec = Instance().regNamesAPI;
+
+	if (std::find(trueVec.begin(), trueVec.end(), copy) != trueVec.end())
+		return 1;
+	if (std::find(apiVec.begin(), apiVec.end(), copy) != apiVec.end())
+		return 2;
+
+	return 0;
 }

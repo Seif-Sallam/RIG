@@ -13,6 +13,7 @@ public:
 	static RegisterFile &Instance();
 	static std::string GetAPIRegName(const std::string &reg);
 	static std::string GetTrueRegName(const std::string &reg);
+	static int IsRegister(const std::string &str);
 	static uint32_t GetValue(uint32_t index);
 	static void SetValue(uint32_t index, uint32_t value);
 

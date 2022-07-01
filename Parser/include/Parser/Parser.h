@@ -5,8 +5,7 @@
 #include <sstream>
 #include <vector>
 #include <string_view>
-
-struct Token;
+#include "RISC/Instruction.h"
 
 namespace Parser
 {
@@ -21,12 +20,19 @@ namespace Parser
 			INVALID_PARAMETERS,
 			COUNT
 		} type = NO_ERROR;
-		Token *token;
-		inline ErrorMessage(Type t = NO_ERROR) : type(t), token(nullptr) {}
+		inline ErrorMessage(Type t = NO_ERROR) : type(t) {}
 		operator bool();
 	};
 
 	std::ostream &operator<<(std::ostream &stream, const ErrorMessage &message);
+
+	struct ParseOutput
+	{
+		inline ParseOutput(ErrorMessage err = ErrorMessage(ErrorMessage::NO_ERROR)) : err(err) {}
+		std::vector<std::string> labels;
+		std::vector<Instruction> instructions;
+		ErrorMessage err;
+	};
 
 	class Parser
 	{
@@ -35,20 +41,16 @@ namespace Parser
 		bool ReadFile(std::string_view filePath);
 		void CleanParserData();
 		void PrintFileContent() const;
-		ErrorMessage Parse();
+		ParseOutput Parse();
 		~Parser();
 
+		void FormatFile();
+
 	private:
-		struct CharacterIndex
-		{
-			char c;
-			uint32_t index;
-		};
-		CharacterIndex FindFirstOfTokens(const std::string &str);
-		void SanitizeFileContent();
+		void SanitizeFileContent(std::string &file, bool removeComments);
 
 	private:
 		std::string m_FileContent;
-		std::vector<Token *> m_Tokens;
+		std::string m_ParsableFile;
 	};
 }

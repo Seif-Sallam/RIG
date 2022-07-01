@@ -1,11 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 
 set(SOURCES
-	./src/Rig/main.cpp
-	./src/Rig/Parser.cpp)
-
-set(HEADERS
-	./include/Rig/Parser.h)
+	./src/Rig/main.cpp)
 
 add_executable(
 	RIG
@@ -18,10 +14,12 @@ target_include_directories(
 	PRIVATE
 	./include/
 	../Parser/include/
+	../RISC/include/
 )
 
 target_link_libraries(RIG
 	PRIVATE
+	RISC
 	Parser
 )
 
