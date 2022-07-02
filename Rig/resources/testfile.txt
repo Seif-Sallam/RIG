@@ -1,5 +1,4 @@
-.text
-# Comment
+.text # Comment
 
 addi x0, x1, 0xff
 
@@ -19,7 +18,7 @@ ebreak
 fence
 beq x0, x0, 10
 
-.data
+.data  
 value: .space  32
 arr: .asciz "STRING"
 data: .ascii "SOME DATA"

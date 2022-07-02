@@ -55,6 +55,20 @@ namespace Parser
 		CleanParserData();
 	}
 
+	inline static void AddNewLineAfter(std::string &str, const char *pattern)
+	{
+		int32_t findIndex = str.find(pattern);
+		if (findIndex != std::string::npos)
+		{
+			if (findIndex - str.size() < 10)
+			{
+				uint32_t index = findIndex + strlen(pattern);
+				if (str[index] != '\n')
+					str.insert(str.begin() + index, '\n');
+			}
+		}
+	}
+
 	void Parser::SanitizeFileContent(std::string &fileContent, bool removeComments)
 	{
 		bool inComment = false;
@@ -138,6 +152,13 @@ namespace Parser
 				{
 					c = char(27);
 				}
+				if (foundWhiteSpace)
+				{
+					for (uint32_t index = whiteSpaceStart; index < i; index++)
+					{
+						fileContent[index] = char(27);
+					}
+				}
 				openedParn = false;
 				foundWhiteSpace = false;
 				if (inComment)
@@ -190,7 +211,11 @@ namespace Parser
 
 		auto it = std::remove_if(fileContent.begin(), fileContent.end(), [](const char &c)
 								 { return c == (char)27; });
-
+		// Adding a new line after the .data and the .text if there is not
+		{
+			AddNewLineAfter(fileContent, ".data");
+			AddNewLineAfter(fileContent, ".text");
+		}
 		fileContent.erase(it, fileContent.end());
 	}
 
