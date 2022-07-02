@@ -28,7 +28,10 @@ RISC32I
 # Next STEPS:
 
 - Getting the data section to be parsed correctly.
-- Parsing labels and putting them with the right address (both instructions and data).
+- Pre-processing stage:
+  - Parsing labels and putting them with the right address (both instructions and data).
+  - Parsing Macros.
+  - Include files. (Labels change their names to UNIQUE identifiers that are acceptable and created by the preprocessor "file_name_label_name")
 - Dumping the instructions in binary format.
 - Disassembling the binary format to readable assembly instructions. (NO DATA SECTION, NOT NECC. WORKING CODE, JUST INSTRUCTIONS DISASSEMBLED)
 - Getting all the directives to work.

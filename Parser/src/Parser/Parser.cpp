@@ -343,13 +343,13 @@ namespace Parser
 					int n = sscanf(line.c_str(), "%*[A-Z] %[A-Za-z0-9], %[A-Za-z0-9]", rd, imm);
 					if (n < 2)
 					{
-						output.err = {ErrorMessage::INVALID_PARAMETERS};
+						output.err = {ErrorMessage::INVALID_PARAMETERS, "Expected format <Instruction> <rd>, <imm>; Instruction: %s", name};
 						return;
 					}
 					std::string rdString = RegisterFile::GetTrueRegName(rd);
 					if (rdString == "INVALID" || !IsInteger(imm))
 					{
-						output.err = {ErrorMessage::INVALID_PARAMETERS};
+						output.err = {ErrorMessage::INVALID_PARAMETERS, "Invalid format, instruction: %s", name};
 						return;
 					}
 					uint32_t finalRD;
@@ -366,14 +366,14 @@ namespace Parser
 					int n = sscanf(line.c_str(), "%*[A-Z] %[A-Za-z0-9], %[A-Za-z0-9](%[A-Za-z0-9])", rd, imm, rs1);
 					if (n < 3)
 					{
-						output.err = {ErrorMessage::INVALID_PARAMETERS};
+						output.err = {ErrorMessage::INVALID_PARAMETERS, "Expected format <Instruction> <rd>, <imm>(<rs1>); Instruction: %s", name};
 						return;
 					}
 					std::string rdString = RegisterFile::GetTrueRegName(rd);
 					std::string rs1String = RegisterFile::GetTrueRegName(rs1);
 					if (rdString == "INVALID" || rs1String == "INVALID" || !IsInteger(imm))
 					{
-						output.err = {ErrorMessage::INVALID_PARAMETERS};
+						output.err = {ErrorMessage::INVALID_PARAMETERS, "Invalid format, instruction: %s", name};
 						return;
 					}
 					uint32_t finalRD, finalRS1;
@@ -392,14 +392,14 @@ namespace Parser
 					int n = sscanf(line.c_str(), "%*[A-Z] %[A-Za-z0-9], %[A-Za-z0-9](%[A-Za-z0-9])", rs2, imm, rs1);
 					if (n < 3)
 					{
-						output.err = {ErrorMessage::INVALID_PARAMETERS};
+						output.err = {ErrorMessage::INVALID_PARAMETERS, "Expected format <Instruction> <rs2>, <imm>(<rs1>); Instruction: %s", name};
 						return;
 					}
 					std::string rs1String = RegisterFile::GetTrueRegName(rs1);
 					std::string rs2String = RegisterFile::GetTrueRegName(rs2);
 					if (rs1String == "INVALID" || rs2String == "INVALID" || !IsInteger(imm))
 					{
-						output.err = {ErrorMessage::INVALID_PARAMETERS};
+						output.err = {ErrorMessage::INVALID_PARAMETERS, "Invalid format, instruction: %s", name};
 						return;
 					}
 					uint32_t finalRS1, finalRS2;
@@ -418,7 +418,7 @@ namespace Parser
 					int n = sscanf(line.c_str(), "%*[A-Z] %[A-Za-z0-9], %[A-Za-z0-9], %[A-Za-z0-9]", rd, rs1, rs2);
 					if (n < 3)
 					{
-						output.err = {ErrorMessage::INVALID_PARAMETERS};
+						output.err = {ErrorMessage::INVALID_PARAMETERS, "Expected format <Instruction> <rd>, <rs1>, <rs2>; Instruction: %s", name};
 						return;
 					}
 					std::string rdString = RegisterFile::GetTrueRegName(rd);
@@ -426,7 +426,7 @@ namespace Parser
 					std::string rs2String = RegisterFile::GetTrueRegName(rs2);
 					if (rs2String == "INVALID" || rs1String == "INVALID" || rdString == "INVALID")
 					{
-						output.err = {ErrorMessage::INVALID_PARAMETERS};
+						output.err = {ErrorMessage::INVALID_PARAMETERS, "Invalid format, instruction: %s", name};
 						return;
 					}
 					uint32_t finalRD, finalRS1, finalRS2;
@@ -445,14 +445,14 @@ namespace Parser
 					int n = sscanf(line.c_str(), "%*[A-Z] %[A-Za-z0-9], %[A-Za-z0-9], %[A-Za-z0-9]", rd, rs1, imm);
 					if (n < 3)
 					{
-						output.err = {ErrorMessage::INVALID_PARAMETERS};
+						output.err = ErrorMessage(ErrorMessage::INVALID_PARAMETERS, "Expected format <Instruction> <rd>, <rs1>, <imm>; Instruction: %s", name.c_str());
 						return;
 					}
 					std::string rdString = RegisterFile::GetTrueRegName(rd);
 					std::string rs1String = RegisterFile::GetTrueRegName(rs1);
 					if (rs1String == "INVALID" || rdString == "INVALID" || !IsInteger(imm))
 					{
-						output.err = {ErrorMessage::INVALID_PARAMETERS};
+						output.err = {ErrorMessage::INVALID_PARAMETERS, "Invalid format, instruction: %s", name};
 						return;
 					}
 					uint32_t finalRD, finalRS1, finalIMM;
@@ -477,14 +477,14 @@ namespace Parser
 					int n = sscanf(line.c_str(), "%*[A-Z] %[A-Za-z0-9], %[A-Za-z0-9], %[A-Za-z0-9]", rs1, rs2, imm);
 					if (n < 3)
 					{
-						output.err = {ErrorMessage::INVALID_PARAMETERS};
+						output.err = {ErrorMessage::INVALID_PARAMETERS, "Expected format <Instruction> <rs1>, <rs2>, <imm/Label>; Instruction: %s", name};
 						return;
 					}
 					std::string rs1String = RegisterFile::GetTrueRegName(rs1);
 					std::string rs2String = RegisterFile::GetTrueRegName(rs2);
 					if (rs1String == "INVALID" || rs2String == "INVALID" || !IsInteger(imm))
 					{
-						output.err = {ErrorMessage::INVALID_PARAMETERS};
+						output.err = {ErrorMessage::INVALID_PARAMETERS, "Invalid format, instruction: %s", name};
 						return;
 					}
 					uint32_t finalRS2, finalRS1, finalIMM;
@@ -500,14 +500,37 @@ namespace Parser
 				}
 				break;
 				default: // INVALID
-					output.err = {ErrorMessage::INVALID_INSTRUCTION};
+					output.err = {ErrorMessage::INVALID_INSTRUCTION, "Unsupported instruction: Did you write it correctly?\n\t %s", inst};
 					return;
 					break;
 				}
 			}
 			else
-				output.err = {ErrorMessage::INVALID_INSTRUCTION};
+				output.err = {ErrorMessage::INVALID_INSTRUCTION, "Unsupported instruction: Did you write it correctly?\n\t %s", line};
 		}
+	}
+
+	struct FileText
+	{
+		std::string textSection;
+		std::string dataSection;
+		ErrorMessage err;
+	};
+
+	FileText GenerateTextAndData(const std::string &fileContent)
+	{
+		FileText output;
+
+		// The bold assumption that the data section exists only ONCE
+		if (uint32_t startOfdataIndex = fileContent.find(".data"); startOfdataIndex != std::string::npos)
+		{
+			// There is a data section
+
+			if (uint32_t startOftextIndex = fileContent.find(".text"); startOftextIndex != std::string::npos)
+			{
+			}
+		}
+		return output;
 	}
 
 	ParseOutput Parser::Parse()
@@ -540,12 +563,7 @@ namespace Parser
 
 	std::ostream &operator<<(std::ostream &stream, const ErrorMessage &message)
 	{
-		stream << "Error: " << enumNames.at(message.type) << '\n';
+		stream << "Error: " << enumNames.at(message.type) << "\n\tMessage: " << message.msg << '\n';
 		return stream;
-	}
-
-	ErrorMessage::operator bool()
-	{
-		return type != NO_ERROR;
 	}
 }
