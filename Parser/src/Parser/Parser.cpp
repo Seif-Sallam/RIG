@@ -209,7 +209,7 @@ namespace Parser
 			std::string line;
 			std::getline(ss, line);
 
-			uint32_t index = line.find(":");
+			int32_t index = line.find(":");
 
 			if (index != std::string::npos)
 			{
@@ -510,26 +510,65 @@ namespace Parser
 		}
 	}
 
-	struct FileText
+	Parser::FileText Parser::GenerateTextAndData(const std::string &fileContent)
 	{
-		std::string textSection;
-		std::string dataSection;
-		ErrorMessage err;
-	};
-
-	FileText GenerateTextAndData(const std::string &fileContent)
-	{
-		FileText output;
-
-		// The bold assumption that the data section exists only ONCE
-		if (uint32_t startOfdataIndex = fileContent.find(".data"); startOfdataIndex != std::string::npos)
+		std::cout << "Parsing text and data\n";
+		Parser::FileText output;
+		int32_t startOfDataSection = fileContent.find(".data");
 		{
-			// There is a data section
-
-			if (uint32_t startOftextIndex = fileContent.find(".text"); startOftextIndex != std::string::npos)
+			int32_t endOfDataIndex = fileContent.find(".data", startOfDataSection + 5);
+			// The bold assumption that the data section exists only ONCE
+			if (endOfDataIndex != std::string::npos)
 			{
+				printf("startOfDataSection: %u, end: %u\n", startOfDataSection, endOfDataIndex);
+				output.err = {ErrorMessage::INVALID_STRUCTURE_DATA, "There is more than one data section. (There should be only one data section)"};
+				return output;
 			}
 		}
+		int32_t startOfTextSection = fileContent.find(".text");
+		{
+			int32_t endOfTextSection = fileContent.find(".text", startOfTextSection + 5);
+			// We will always have a text section
+			if (startOfTextSection == std::string::npos || endOfTextSection != std::string::npos)
+			{
+				printf("startOfTextSection: %d, end: %d\n", startOfTextSection, endOfTextSection);
+				output.err = {ErrorMessage::INVALID_STRUCTURE_TEXT, "There is more than one text section. (There should beo nly one data section"};
+				return output;
+			}
+		}
+
+		// we will not necc. have a data section
+		if (startOfDataSection != std::string::npos)
+		{
+			auto &dataSection = output.dataSection;
+			if (startOfDataSection < startOfTextSection)
+			{
+				uint32_t count = startOfTextSection - 6;
+				uint32_t start = startOfDataSection + 6;
+				dataSection = fileContent.substr(start, count);
+			}
+			else
+			{
+				uint32_t start = startOfDataSection + 6;
+				dataSection = fileContent.substr(start);
+			}
+		}
+
+		{
+			auto &textSection = output.textSection;
+			if (startOfTextSection < startOfDataSection)
+			{
+				uint32_t count = startOfDataSection - 6;
+				uint32_t start = startOfTextSection + 6;
+				textSection = fileContent.substr(start, count);
+			}
+			else
+			{
+				uint32_t start = startOfTextSection + 6;
+				textSection = fileContent.substr(start);
+			}
+		}
+
 		return output;
 	}
 
@@ -537,12 +576,17 @@ namespace Parser
 	{
 		ParseOutput output;
 
-		std::string textSection = m_ParsableFile;
-		std::string dataSection = m_ParsableFile;
+		auto files = GenerateTextAndData(m_ParsableFile);
 
-		GrabDataSection(dataSection, output);
+		GrabDataSection(files.dataSection, output);
 		GrabLabels(m_ParsableFile, output);
-		GrabInstructions(textSection, output);
+		GrabInstructions(files.textSection, output);
+		std::cout << "LABELS:\n";
+		for (auto &label : output.labels)
+		{
+			std::cout << label << "\n";
+		}
+		std::cout << "\n";
 		return output;
 	}
 
@@ -559,6 +603,10 @@ namespace Parser
 				  INVALID_SYMBOL),
 		MAP_ENTRY(ErrorMessage,
 				  NO_ERROR),
+		MAP_ENTRY(ErrorMessage,
+				  INVALID_STRUCTURE_DATA),
+		MAP_ENTRY(ErrorMessage,
+				  INVALID_STRUCTURE_TEXT),
 	};
 
 	std::ostream &operator<<(std::ostream &stream, const ErrorMessage &message)

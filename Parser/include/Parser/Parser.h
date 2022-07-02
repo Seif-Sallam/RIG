@@ -1,4 +1,5 @@
 #pragma once
+
 #include <stdarg.h>
 #include <iostream>
 #include <string>
@@ -30,10 +31,22 @@ namespace Parser
 			memset(msg, 0, 1024);
 			if (fmt != nullptr)
 			{
-				va_list args;
-				va_start(args, fmt);
-				vsprintf(msg, fmt, args);
-				va_end(args);
+				uint32_t argCount = 0;
+				for (auto p = fmt; *p != '\0'; p++)
+					if (*p == '%')
+						argCount++;
+
+				if (argCount >= 1)
+				{
+					va_list args;
+					va_start(args, fmt);
+					vsprintf(msg, fmt, args);
+					va_end(args);
+				}
+				else
+				{
+					strcpy(msg, fmt);
+				}
 			}
 		}
 		inline ErrorMessage(ErrorMessage &&e)
@@ -97,6 +110,15 @@ namespace Parser
 
 	private:
 		void SanitizeFileContent(std::string &file, bool removeComments);
+
+		struct FileText
+		{
+			std::string textSection;
+			std::string dataSection;
+			ErrorMessage err;
+		};
+
+		FileText GenerateTextAndData(const std::string &fileContent);
 
 	private:
 		std::string m_FileContent;
