@@ -1,4 +1,6 @@
 #include "RISC/RegisterFile.h"
+#include <algorithm>
+
 #define STR(reg) #reg
 
 const std::vector<std::string> RegisterFile::regNamesTrue = {

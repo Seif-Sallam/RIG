@@ -1,5 +1,8 @@
 #include "RISC/Instruction.h"
+#include <stdlib.h>
 #include <unordered_map>
+#include <algorithm>
+#include <cstring>
 
 #define TYPE_NAME(funcName) #funcName
 #define TABLE_ENTRY(funcName)         \
@@ -245,27 +248,27 @@ const std::string Instruction::FormatInstruction(Instruction &inst)
 	switch (type)
 	{
 	case TYPE1:
-		n = sprintf_s(format, " x%u, %u", inst.rd, inst.imm);
+		n = sprintf(format, " x%u, %u", inst.rd, inst.imm);
 		break;
 	case TYPE2:
-		n = sprintf_s(format, " x%u, %u(x%u)", inst.rd, inst.imm, inst.rs1);
+		n = sprintf(format, " x%u, %u(x%u)", inst.rd, inst.imm, inst.rs1);
 		break;
 	case TYPE3:
-		n = sprintf_s(format, " x%u, %u(x%u)", inst.rs2, inst.imm, inst.rs1);
+		n = sprintf(format, " x%u, %u(x%u)", inst.rs2, inst.imm, inst.rs1);
 		break;
 	case TYPE4:
-		n = sprintf_s(format, " x%u, x%u, x%u", inst.rd, inst.rs1, inst.rs2);
+		n = sprintf(format, " x%u, x%u, x%u", inst.rd, inst.rs1, inst.rs2);
 		break;
 	case TYPE5:
-		n = sprintf_s(format, " x%u, x%u, %u", inst.rd, inst.rs1, inst.imm);
+		n = sprintf(format, " x%u, x%u, %u", inst.rd, inst.rs1, inst.imm);
 		break;
 	case TYPE6:
 		break;
 	case TYPE7:
-		n = sprintf_s(format, " x%u, x%u, %u", inst.rs1, inst.rs2, inst.imm);
+		n = sprintf(format, " x%u, x%u, %u", inst.rs1, inst.rs2, inst.imm);
 		break;
 	default:
-		n = sprintf_s(format, " <Unspported Instruction>");
+		n = sprintf(format, " <Unspported Instruction>");
 		break;
 	}
 

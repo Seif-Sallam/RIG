@@ -8,6 +8,7 @@
 #include <vector>
 #include <string_view>
 #include "RISC/Instruction.h"
+#include <cstring>
 
 namespace Parser
 {

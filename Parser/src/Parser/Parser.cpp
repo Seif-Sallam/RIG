@@ -4,9 +4,8 @@
 
 #include <math.h>
 #include <stdlib.h>
-#include <stdio.h>
-
 #include <map>
+#include <algorithm>
 
 #define MAP_ENTRY(type, enumName) \
 	{                             \
@@ -28,7 +27,9 @@ namespace Parser
 			uint32_t size = inputFile.tellg();
 			m_FileContent = std::string(std::istreambuf_iterator<char>(inputFile), std::istreambuf_iterator<char>());
 			inputFile.close();
-			m_FileContent.erase(std::remove(m_FileContent.begin(), m_FileContent.end(), '\r'), m_FileContent.end());
+
+			auto it = std::remove(m_FileContent.begin(), m_FileContent.end(), '\r');
+			m_FileContent.erase(it, m_FileContent.end());
 			m_ParsableFile = m_FileContent;
 			SanitizeFileContent(m_ParsableFile, true);
 			std::cout << m_ParsableFile << std::endl;
