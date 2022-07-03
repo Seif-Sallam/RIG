@@ -77,7 +77,6 @@ namespace Parser
 		bool openedParn = false;
 		uint32_t whiteSpaceStart = 0;
 		int32_t startComment = 0;
-		uint32_t endComment = 0;
 		uint32_t newLineCount = 0;
 		char lastCharacter = 0;
 		bool rmEntireLine = false;
@@ -215,6 +214,11 @@ namespace Parser
 		{
 			AddNewLineAfter(fileContent, ".data");
 			AddNewLineAfter(fileContent, ".text");
+			/*
+				List of some of the directives
+			*/
+			AddNewLineAfter(fileContent, ".macro");
+			AddNewLineAfter(fileContent, ".end_macro");
 		}
 		fileContent.erase(it, fileContent.end());
 	}
@@ -603,8 +607,8 @@ namespace Parser
 
 		auto files = GenerateTextAndData(m_ParsableFile);
 
+		// GrabLabels(m_ParsableFile, output);
 		GrabDataSection(files.dataSection, output);
-		GrabLabels(m_ParsableFile, output);
 		GrabInstructions(files.textSection, output);
 		std::cout << "LABELS:\n";
 		for (auto &label : output.labels)
