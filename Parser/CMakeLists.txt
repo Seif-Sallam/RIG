@@ -1,9 +1,12 @@
 cmake_minimum_required(VERSION 3.16)
 
+FILE(GLOB_RECURSE SOURCES ./src/Parser/*.cpp)
+FILE(GLOB_RECURSE HEADERS ./include/Parser/*.h)
+
 add_library(Parser
 	STATIC
-	src/Parser/Parser.cpp
-	include/Parser/Parser.h
+	${SOURCES}
+	${HEADERS}
 )
 
 target_link_libraries(Parser

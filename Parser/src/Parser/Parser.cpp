@@ -1,19 +1,16 @@
-#include "Parser/Parser.h"
+#include <fstream>
+#include <sstream>
+#include <math.h>
+#include <cstring>
+#include <algorithm>
+
+#include <Parser/Parser.h>
+
 #include "RISC/Instruction.h"
 #include "RISC/RegisterFile.h"
 
-#include <math.h>
-#include <stdlib.h>
-#include <map>
-#include <algorithm>
-
-#define MAP_ENTRY(type, enumName) \
-	{                             \
-		type::enumName, #enumName \
-	}
 namespace Parser
 {
-
 	Parser::Parser()
 		: m_FileContent("")
 	{
@@ -622,26 +619,4 @@ namespace Parser
 
 	const std::string g_Delimnators = ":#().,";
 
-	const std::map<ErrorMessage::Type, const char *> enumNames{
-		MAP_ENTRY(ErrorMessage,
-				  INVALID_INSTRUCTION),
-		MAP_ENTRY(ErrorMessage,
-				  INVALID_LABEL),
-		MAP_ENTRY(ErrorMessage,
-				  INVALID_PARAMETERS),
-		MAP_ENTRY(ErrorMessage,
-				  INVALID_SYMBOL),
-		MAP_ENTRY(ErrorMessage,
-				  NO_ERROR),
-		MAP_ENTRY(ErrorMessage,
-				  INVALID_STRUCTURE_DATA),
-		MAP_ENTRY(ErrorMessage,
-				  INVALID_STRUCTURE_TEXT),
-	};
-
-	std::ostream &operator<<(std::ostream &stream, const ErrorMessage &message)
-	{
-		stream << "Error: " << enumNames.at(message.type) << "\n\tMessage: " << message.msg << '\n';
-		return stream;
-	}
 }
