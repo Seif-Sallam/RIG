@@ -24,6 +24,7 @@ RISC32I
   - Not entirely, just the text section
   - The data section is NEXT
   - The macros and the other directives will be NEXT
+- Parsing the data section so far is correct, but we don't get the data inside the application yet.
 
 # Next STEPS:
 
