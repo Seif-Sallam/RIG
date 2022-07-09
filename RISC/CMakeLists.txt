@@ -1,13 +1,12 @@
 cmake_minimum_required(VERSION 3.16)
 
+FILE(GLOB_RECURSE SOURCES src/RISC/*.cpp)
+FILE(GLOB_RECURSE HEADERS include/RISC/*.h)
+
 add_library(RISC
 	STATIC
-	src/RISC/Translator.cpp
-	src/RISC/Instruction.cpp
-	src/RISC/RegisterFile.cpp
-	include/RISC/Translator.h
-	include/RISC/Instruction.h
-	include/RISC/RegisterFile.h
+	${SOURCES}
+	${HEADERS}
 )
 
 target_include_directories(RISC

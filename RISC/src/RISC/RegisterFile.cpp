@@ -79,6 +79,12 @@ RegisterFile &RegisterFile::Instance()
 	return instance;
 }
 
+uint32_t RegisterFile::GetRegisterIndex(const std::string &reg)
+{
+	auto regName = Instance().GetTrueRegName(reg);
+	uint32_t index = Instance().trueToIndexMap[regName];
+}
+
 RegisterFile::RegisterFile()
 {
 	for (uint32_t i = 0; i < 32; i++)
@@ -86,7 +92,10 @@ RegisterFile::RegisterFile()
 		m_Regs[i] = 0;
 		trueToApiMap.insert(std::make_pair(regNamesTrue[i], regNamesAPI[i]));
 		APIToTrueMap.insert(std::make_pair(regNamesAPI[i], regNamesTrue[i]));
+		trueToIndexMap.insert(std::make_pair(regNamesTrue[i], i));
 	}
+	m_Regs[2] = 0x7fffeffc;
+	m_Regs[3] = 0x10008000;
 }
 
 std::string RegisterFile::GetAPIRegName(const std::string &reg)

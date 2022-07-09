@@ -245,7 +245,7 @@ namespace Parser
 		}
 	}
 
-	inline static void GrabDataSection(const std::string &dataSection, ParseOutput &output)
+	inline static void GrabDataSectionItems(const std::string &dataSection, ParseOutput &output)
 	{
 		std::stringstream ss;
 		ss << dataSection;
@@ -606,7 +606,7 @@ namespace Parser
 		auto files = GenerateTextAndData(m_ParsableFile);
 
 		// GrabLabels(m_ParsableFile, output);
-		GrabDataSection(files.dataSection, output);
+		GrabDataSectionItems(files.dataSection, output);
 		GrabInstructions(files.textSection, output);
 		std::cout << "LABELS:\n";
 		for (auto &label : output.labels)
