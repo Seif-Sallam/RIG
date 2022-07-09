@@ -4,7 +4,7 @@
 #include <vector>
 #include <array>
 
-#define MEMORY_SIZE 1024 * 1024 * 1024 * 4 // 4 GB
+#define MEMORY_SIZE 1024L * 1024L * 1024L * 4L // 4 GB
 // Handle the errors in a better way (wrap them in a struct that takes in the output + an error message.)
 class Memory
 {
@@ -27,9 +27,9 @@ private:
 
 	bool CheckValidity(uint32_t address, bool isData);
 
-	static const uint32_t m_TextStartAddr = 0x00400000;
-	static const uint32_t m_DataStartAddr = 0x10010000;
-	static const uint32_t m_HeapStartAddr = 0x10040000;
-	static const uint32_t m_GpStartAddr = 0x10008000;
+	const uint32_t m_TextStartAddr = 0x00400000;
+	const uint32_t m_DataStartAddr = 0x10010000;
+	const uint32_t m_HeapStartAddr = 0x10040000;
+	const uint32_t m_GpStartAddr = 0x10008000;
 	uint8_t m_Blocks[MEMORY_SIZE];
 };

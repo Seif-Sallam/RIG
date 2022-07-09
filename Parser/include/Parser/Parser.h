@@ -10,10 +10,35 @@
 
 namespace Parser
 {
+
+	struct Label
+	{
+		std::string labelString;
+		uint32_t address;
+	};
+
+	struct DataLabel : Label
+	{
+		enum DataType
+		{
+			WORD,
+			HALF_WORD,
+			BYTE,
+			STRING,
+			C_STRING,
+			DOUBLE,
+			FLOAT,
+			SPACE,
+		} type;
+		std::string data;
+	};
+
 	struct ParseOutput
 	{
 		inline ParseOutput(ErrorMessage errMsg = ErrorMessage(ErrorMessage::NO_ERROR)) : err(errMsg) {}
-		std::vector<std::string> labels;
+		uint32_t dataSectionSize = 0;
+		std::vector<Label> instLabels;
+		std::vector<DataLabel> dataLabels;
 		std::vector<Instruction> instructions;
 		ErrorMessage err;
 	};
@@ -32,6 +57,7 @@ namespace Parser
 
 	private:
 		void SanitizeFileContent(std::string &file, bool removeComments);
+		ErrorMessage SanitizeDataSection(std::string &dataSection);
 
 		struct FileText
 		{

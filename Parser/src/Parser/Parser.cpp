@@ -3,6 +3,7 @@
 #include <math.h>
 #include <cstring>
 #include <algorithm>
+#include <regex>
 
 #include <Parser/Parser.h>
 
@@ -221,6 +222,85 @@ namespace Parser
 		fileContent.erase(it, fileContent.end());
 	}
 
+	ErrorMessage Parser::SanitizeDataSection(std::string &dataSection)
+	{
+		std::string finalDataSection = "";
+		std::stringstream ss;
+		ss << dataSection;
+		while (!ss.eof())
+		{
+			std::string label;
+			std::getline(ss, label);
+			if (label.empty())
+				continue;
+			label.pop_back();
+
+			if (!std::regex_match(label, std::regex("([a-zA-Z_][a-zA-Z0-9_]*)")))
+				return ErrorMessage{ErrorMessage::INVALID_LABEL, "Invalid label naming: %s", label.c_str()};
+
+			finalDataSection += label + ":\n";
+
+			std::string directive;
+			std::getline(ss, directive);
+			std::string data;
+			uint32_t spaceIndex = directive.find(" ");
+			data = directive.substr(spaceIndex + 1);
+			directive = directive.substr(0, spaceIndex);
+
+			if (directive == ".asciz" || directive == ".ascii" || directive == ".string")
+			{
+				uint32_t numOfQuotes = 0;
+				char quoteType = 0;
+				for (uint32_t i = 0; i < data.size(); i++)
+				{
+					if (data[i] == '\"' || data[i] == '\'')
+					{
+						if (quoteType == 0)
+							quoteType = data[i];
+
+						if (numOfQuotes >= 1)
+						{
+							if ((i != data.size() - 1) && data[i - 1] != '\\')
+								return ErrorMessage{ErrorMessage::INVALID_DIRECTIVE_DATA, "Invalid directive data (Escape Character not found): %s\n\t at index: %u", data.c_str(), i};
+							if (i == data.size() - 1 && (data[i - 1] == '\\' || quoteType != data[i]))
+								return ErrorMessage{ErrorMessage::INVALID_DIRECTIVE_DATA, "Invalid directive data (Missing or unmatching quote): %s\n\tat index: %u", data.c_str(), i};
+						}
+						else
+							numOfQuotes++;
+					}
+					else
+					{
+						if (numOfQuotes == 0)
+							return ErrorMessage{ErrorMessage::INVALID_DIRECTIVE_DATA, "Invalid directive data: %s", data.c_str()};
+					}
+				}
+				// make sure the data is correct
+			}
+			else if (directive == ".word" || directive == ".half" || directive == ".byte")
+			{
+			}
+			else if (directive == ".space")
+			{
+			}
+			else if (directive == ".float" || directive == ".double")
+			{
+			}
+			else
+			{
+				return ErrorMessage{ErrorMessage::INVALID_DIRECTIVE, "Invalid Directive (Directive not supported): %s", directive.c_str()};
+			}
+			finalDataSection += directive + "\n" + data + "\n";
+			// Structure will be like:
+			/*
+				<Label>:
+				<Directive>
+				Data
+			*/
+		}
+		dataSection = finalDataSection;
+		return ErrorMessage{ErrorMessage::NO_ERROR, "NO ERR"};
+	}
+
 	void Parser::FormatFile()
 	{
 		this->SanitizeFileContent(m_FileContent, false);
@@ -240,7 +320,7 @@ namespace Parser
 
 			if (index != std::string::npos)
 			{
-				output.labels.push_back(line.substr(0, index));
+				// output.labels.push_back(line.substr(0, index));
 			}
 		}
 	}
@@ -251,11 +331,103 @@ namespace Parser
 		ss << dataSection;
 
 		bool foundDataSection = false;
+		uint32_t dataSectionStart = 0; // to be added later to be the start of the memory
 		while (!ss.eof())
 		{
 			std::string line;
 			std::getline(ss, line);
 			// to be implemented after implementing the directives class (data section of the program)
+			if (uint32_t index = line.find(":"); index != std::string::npos)
+			{
+				std::string label = line.substr(0, index);
+				if (std::regex_match(label, std::regex("([a-zA-Z_][a-zA-Z0-9_]*)")))
+				{
+					DataLabel dataLbl;
+					dataLbl.labelString = label;
+					std::string dataLine;
+					std::getline(ss, dataLine);
+					if (uint32_t dotIndex = dataLine.find("."); dotIndex != std::string::npos)
+					{
+						uint32_t spaceIndex = 0;
+						for (uint32_t i = dotIndex + 1; i < dataLine.size(); i++)
+							if (dataLine[i] == ' ')
+							{
+								spaceIndex = i;
+								break;
+							}
+						if (spaceIndex == 0)
+						{
+							output.err = {ErrorMessage::INVALID_DIRECTIVE, "Directive was not specified: %s", dataLine};
+							return;
+						}
+						std::string directive = dataLine.substr(dotIndex + 1, spaceIndex - dotIndex);
+						std::string directiveData = dataLine.substr(spaceIndex, -1);
+						if (directive == "asciz" || directive == "string")
+						{
+							if (std::regex_match(directiveData, std::regex("(\"[\\s\\S]*\")")))
+							{
+								dataLbl.data = directiveData;
+							}
+							else
+							{
+								output.err = {ErrorMessage::INVALID_DIRECTIVE, "Directive was not specified: %s", dataLine};
+								return;
+							}
+						}
+						else if (directive == "word")
+						{
+							for (auto &c : directiveData)
+							{
+								if (!isdigit(c) && c != ' ')
+								{
+									output.err = {ErrorMessage::INVALID_DIRECTIVE, "Directive was not specified: %s", dataLine};
+									return;
+								}
+							}
+							dataLbl.data = directiveData;
+						}
+						else if (directive == "byte")
+						{
+						}
+						else if (directive == "half")
+						{
+						}
+						else if (directive == "ascii")
+						{
+						}
+						else if (directive == "space")
+						{
+						}
+						else if (directive == "double")
+						{
+						}
+						else if (directive == "float")
+						{
+						}
+						else
+						{
+							output.err = {ErrorMessage::INVALID_DIRECTIVE, "Directive was not specified: %s", dataLine};
+							return;
+						}
+					}
+					else
+					{
+						output.err = {ErrorMessage::INVALID_DIRECTIVE, "Directive was not specified: %s", dataLine};
+						return;
+					}
+					output.dataLabels.push_back(dataLbl);
+				}
+				else
+				{
+					output.err = {ErrorMessage::INVALID_LABEL, "Invalid Label: %s", label};
+					return;
+				}
+			}
+			else
+			{
+				// There is an error in the string.
+				continue;
+			}
 		}
 	}
 
@@ -595,7 +767,7 @@ namespace Parser
 				textSection = fileContent.substr(start);
 			}
 		}
-
+		std::cout << "Finished\n";
 		return output;
 	}
 
@@ -604,19 +776,25 @@ namespace Parser
 		ParseOutput output;
 
 		auto files = GenerateTextAndData(m_ParsableFile);
-
+		std::cout << "Starting sanitization\n";
 		// GrabLabels(m_ParsableFile, output);
-		GrabDataSectionItems(files.dataSection, output);
-		GrabInstructions(files.textSection, output);
-		std::cout << "LABELS:\n";
-		for (auto &label : output.labels)
+		auto err = SanitizeDataSection(files.dataSection);
+		std::cout << files.dataSection << std::endl;
+		if (err)
 		{
-			std::cout << label << "\n";
+			std::cout << "err: " << err << std::endl;
+			exit(0);
 		}
-		std::cout << "\n";
+		// GrabDataSectionItems(files.dataSection, output);
+		// GrabInstructions(files.textSection, output);
+		// std::cout << "LABELS:\n";
+		// for (auto &label : output.labels)
+		// {
+		// 	std::cout << label << "\n";
+		// }
+		// std::cout << "\n";
 		return output;
 	}
 
 	const std::string g_Delimnators = ":#().,";
-
 }

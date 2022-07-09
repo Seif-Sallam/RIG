@@ -4,17 +4,17 @@
 
 const uint32_t Memory::GetDatStartAddr()
 {
-	return m_DataStartAddr;
+	return Get().m_DataStartAddr;
 }
 
 const uint32_t Memory::GetTextStartAddr()
 {
-	return m_TextStartAddr;
+	return Get().m_TextStartAddr;
 }
 
 const uint32_t Memory::GetHeapStartAddr()
 {
-	return m_HeapStartAddr;
+	return Get().m_HeapStartAddr;
 }
 
 const uint32_t Memory::GetWord(uint32_t address, bool isData)

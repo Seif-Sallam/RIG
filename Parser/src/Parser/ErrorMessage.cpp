@@ -7,9 +7,9 @@
 
 #include <Parser/ErrorMessage.h>
 
-#define MAP_ENTRY(type, enumName) \
-	{                             \
-		type::enumName, #enumName \
+#define MAP_ENTRY(enumName)               \
+	{                                     \
+		ErrorMessage::enumName, #enumName \
 	}
 
 namespace Parser
@@ -86,20 +86,15 @@ namespace Parser
 	}
 
 	const std::map<ErrorMessage::Type, const char *> enumNames{
-		MAP_ENTRY(ErrorMessage,
-				  INVALID_INSTRUCTION),
-		MAP_ENTRY(ErrorMessage,
-				  INVALID_LABEL),
-		MAP_ENTRY(ErrorMessage,
-				  INVALID_PARAMETERS),
-		MAP_ENTRY(ErrorMessage,
-				  INVALID_SYMBOL),
-		MAP_ENTRY(ErrorMessage,
-				  NO_ERROR),
-		MAP_ENTRY(ErrorMessage,
-				  INVALID_STRUCTURE_DATA),
-		MAP_ENTRY(ErrorMessage,
-				  INVALID_STRUCTURE_TEXT),
+		MAP_ENTRY(INVALID_INSTRUCTION),
+		MAP_ENTRY(INVALID_LABEL),
+		MAP_ENTRY(INVALID_PARAMETERS),
+		MAP_ENTRY(INVALID_SYMBOL),
+		MAP_ENTRY(NO_ERROR),
+		MAP_ENTRY(INVALID_STRUCTURE_DATA),
+		MAP_ENTRY(INVALID_STRUCTURE_TEXT),
+		MAP_ENTRY(INVALID_DIRECTIVE),
+		MAP_ENTRY(INVALID_DIRECTIVE_DATA),
 	};
 
 	std::ostream &operator<<(std::ostream &stream, const ErrorMessage &message)

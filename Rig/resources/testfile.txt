@@ -5,10 +5,10 @@ addi x0, x1, 0xff
 lui a0, 0b1010
 
 
-sub s0, s0, s2# ASFASFADFADF A: ASFAF Af a fa FA aff      fad fa    
+sub s0, s0, s2# ASFASFADFADF A: ASFAF Af a fa FA aff      fad fa
 
 
-# fsadfjas dfjas 
+# fsadfjas dfjas
 			ADD x1,    x2,x3
 
 sw t3, 0  (   x   1  0   )
@@ -18,7 +18,8 @@ ebreak
 fence
 beq x0, x0, 10
 
-.data  
+.data
 value: .space  32
-arr: .asciz "STRING"
+arr: .asciz "STR\"ING 13r 13=ri edfi asdf -\"eqq- ru1-fj- ja-sfd ad\'"
 data: .ascii "SOME DATA"
+lel: .string "DSADSA"
