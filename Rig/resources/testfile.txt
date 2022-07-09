@@ -20,6 +20,8 @@ beq x0, x0, 10
 
 .data
 value: .space  32
+shit: .word 3,4,5,6,1 1 3 4 5 5 55  5 6
 arr: .asciz "STR\"ING 13r 13=ri edfi asdf -\"eqq- ru1-fj- ja-sfd ad\'"
 data: .ascii "SOME DATA"
 lel: .string "DSADSA"
+stuff: .float 4.5 144.5 .41 14.42 .3141

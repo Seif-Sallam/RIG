@@ -274,27 +274,63 @@ namespace Parser
 							return ErrorMessage{ErrorMessage::INVALID_DIRECTIVE_DATA, "Invalid directive data: %s", data.c_str()};
 					}
 				}
-				// make sure the data is correct
 			}
 			else if (directive == ".word" || directive == ".half" || directive == ".byte")
 			{
+				// It is either a comma seperated values or a space seperated ones.
+				// So we will remove all the commas and make sure it is only spaces
+				for (uint32_t i = 0; i < data.size(); i++)
+				{
+					char &c = data[i];
+					if (c == ',')
+						c = char(27);
+					else if (isdigit(c) || c == ' ')
+						continue;
+					else
+						return ErrorMessage{ErrorMessage::INVALID_DIRECTIVE_DATA, "Invalid directive data (Found alpha and expected numbers): %s\n\tat index: %u", data.c_str(), i};
+				}
 			}
 			else if (directive == ".space")
 			{
+				// It is only one number, nothing else
+				for (uint32_t i = 0; i < data.size(); i++)
+				{
+					char &c = data[i];
+					if (isdigit(c))
+						continue;
+					else
+						return ErrorMessage{ErrorMessage::INVALID_DIRECTIVE_DATA, "Invalid directive data (Found alpha and expected numbers): %s\n\tat index: %u", data.c_str(), i};
+				}
 			}
 			else if (directive == ".float" || directive == ".double")
 			{
+				// It is only one number, nothing else
+				for (uint32_t i = 0; i < data.size(); i++)
+				{
+					char &c = data[i];
+					if (isdigit(c) || c == '.' || c == ' ')
+						continue;
+					else if (c == ',')
+						c = char(27);
+					else
+						return ErrorMessage{ErrorMessage::INVALID_DIRECTIVE_DATA, "Invalid directive data (Found alpha and expected numbers): %s\n\tat index: %u", data.c_str(), i};
+				}
 			}
 			else
 			{
 				return ErrorMessage{ErrorMessage::INVALID_DIRECTIVE, "Invalid Directive (Directive not supported): %s", directive.c_str()};
 			}
+			// Erase the removable characters
+			data.erase(std::remove_if(data.begin(), data.end(), [](const char &c)
+									  { return c == char(27); }),
+					   data.end());
+
 			finalDataSection += directive + "\n" + data + "\n";
 			// Structure will be like:
 			/*
 				<Label>:
 				<Directive>
-				Data
+				<Data>
 			*/
 		}
 		dataSection = finalDataSection;
