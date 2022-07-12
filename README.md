@@ -3,6 +3,7 @@
 RISC In Graphics.
 
 A RISC-V simulator and editor, that can run RISC-V assembly code and generate many useful formats for the file.
+It will also contain system calls that will create a graphics window, and you can manipulate its pixels with system calls.
 
 ## Supported Specifications:
 
@@ -12,9 +13,10 @@ RISC32I
 
 ### In the future
 
-- 32-bit Compressed Integer instructions.
+- Pesudo instructions
 - 32-bit Integer Multiplication instructions.
 - 32-bit Floating point instructions.
+- 32-bit Compressed Integer instructions.
 - 64-bit instructions.
 
 # Right now what it can do
