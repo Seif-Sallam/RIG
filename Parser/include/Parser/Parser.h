@@ -6,7 +6,8 @@
 
 #include <Parser/ErrorMessage.h>
 
-#include "RISC/Instruction.h"
+#include <RISC/Instruction.h>
+#include <RISC/DataSectionContainer.h>
 
 namespace Parser
 {
@@ -17,29 +18,14 @@ namespace Parser
 		uint32_t address;
 	};
 
-	struct DataLabel : Label
-	{
-		enum DataType
-		{
-			WORD,
-			HALF_WORD,
-			BYTE,
-			STRING,
-			C_STRING,
-			DOUBLE,
-			FLOAT,
-			SPACE,
-		} type;
-		std::string data;
-	};
-
 	struct ParseOutput
 	{
 		inline ParseOutput(ErrorMessage errMsg = ErrorMessage(ErrorMessage::NO_ERROR)) : err(errMsg) {}
 		uint32_t dataSectionSize = 0;
 		std::vector<Label> instLabels;
-		std::vector<DataLabel> dataLabels;
-		std::vector<Instruction> instructions;
+		std::vector<RISC::Instruction> instructions;
+		RISC::DataSectionContainer dataSection;
+
 		ErrorMessage err;
 	};
 

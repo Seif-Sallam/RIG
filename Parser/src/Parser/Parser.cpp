@@ -7,8 +7,9 @@
 
 #include <Parser/Parser.h>
 
-#include "RISC/Instruction.h"
-#include "RISC/RegisterFile.h"
+#include <RISC/RegisterFile.h>
+#include <RISC/Instruction.h>
+#include <RISC/DataSectionContainer.h>
 
 namespace Parser
 {
@@ -26,11 +27,8 @@ namespace Parser
 			m_FileContent = std::string(std::istreambuf_iterator<char>(inputFile), std::istreambuf_iterator<char>());
 			inputFile.close();
 
-			auto it = std::remove(m_FileContent.begin(), m_FileContent.end(), '\r');
-			m_FileContent.erase(it, m_FileContent.end());
+			m_FileContent.erase(std::remove(m_FileContent.begin(), m_FileContent.end(), '\r'), m_FileContent.end());
 			m_ParsableFile = m_FileContent;
-			SanitizeFileContent(m_ParsableFile, true);
-			std::cout << m_ParsableFile << std::endl;
 			return true;
 		}
 		else
@@ -209,6 +207,7 @@ namespace Parser
 
 		auto it = std::remove_if(fileContent.begin(), fileContent.end(), [](const char &c)
 								 { return c == (char)27; });
+		fileContent.erase(it, fileContent.end());
 		// Adding a new line after the .data and the .text if there is not
 		{
 			AddNewLineAfter(fileContent, ".data");
@@ -219,7 +218,9 @@ namespace Parser
 			AddNewLineAfter(fileContent, ".macro");
 			AddNewLineAfter(fileContent, ".end_macro");
 		}
-		fileContent.erase(it, fileContent.end());
+
+		std::cout << "Santitized File:\n"
+				  << fileContent << std::endl;
 	}
 
 	ErrorMessage Parser::SanitizeDataSection(std::string &dataSection)
@@ -277,8 +278,9 @@ namespace Parser
 			}
 			else if (directive == ".word" || directive == ".half" || directive == ".byte")
 			{
-				// It is either a comma seperated values or a space seperated ones.
-				// So we will remove all the commas and make sure it is only spaces
+				// TODO: Use IsInteger function here to support the other integer types :D
+				//  It is either a comma seperated values or a space seperated ones.
+				//  So we will remove all the commas and make sure it is only spaces
 				for (uint32_t i = 0; i < data.size(); i++)
 				{
 					char &c = data[i];
@@ -334,6 +336,9 @@ namespace Parser
 			*/
 		}
 		dataSection = finalDataSection;
+		std::cout << "Finnal Data Section: \n";
+		std::cout << dataSection << std::endl;
+
 		return ErrorMessage{ErrorMessage::NO_ERROR, "NO ERR"};
 	}
 
@@ -361,6 +366,108 @@ namespace Parser
 		}
 	}
 
+	template <class T>
+	inline T *getArrayFromDataItem(const std::string &data, uint32_t &size, uint32_t floatingPoint = 0)
+	{
+		size = std::count(data.begin(), data.end(), ' ') + 1;
+
+		T *arr = new T[size];
+
+		int32_t lastIndex = 0;
+		int32_t space = data.find(' ');
+		for (uint32_t i = 0; i < size; i++)
+		{
+			std::string number = data.substr(lastIndex, space - lastIndex);
+			if (floatingPoint == 1)
+			{
+				arr[i] = (T)std::stof(number);
+			}
+			else if (floatingPoint == 2)
+			{
+				arr[i] = (T)std::stod(number);
+			}
+			else
+			{
+				arr[i] = (T)std::stoul(number);
+			}
+
+			lastIndex = space + 1;
+			space = data.find(' ', space + 1);
+		}
+		return arr;
+	}
+
+	inline static char *getStringFromDataItem(std::string data, bool nullTerminated)
+	{
+		for (uint32_t i = 0; i + 1 < data.size(); i++)
+		{
+			char &c1 = data[i];
+			char &c2 = data[i + 1];
+			if (c1 == '\\')
+			{
+				if (c2 == 'n')
+				{
+					c1 = '\n';
+					c2 = char(27);
+					i++;
+				}
+				else if (c2 == '\\')
+				{
+					c2 = char(27);
+					i++;
+				}
+				else if (c2 == '\"')
+				{
+					c1 = '\"';
+					c2 = char(27);
+					i++;
+				}
+				else if (c2 == '\'')
+				{
+					c1 = '\'';
+					c2 = char(27);
+					i++;
+				}
+				else if (c2 == '\b')
+				{
+					c1 = '\b';
+					c2 = char(27);
+					i++;
+				}
+				else if (c2 == 't')
+				{
+					c1 = '\t';
+					c2 = char(27);
+					i++;
+				}
+				else if (c2 == 'r')
+				{
+					c1 == '\r';
+					c2 = char(27);
+					i++;
+				}
+			}
+		}
+		data.erase(std::remove_if(data.begin(), data.end(), [](char &c)
+								  { return c == char(27); }),
+				   data.end());
+		char *output = nullptr;
+		if (nullTerminated)
+		{
+			output = new char[data.size() + 1];
+			output[data.size()] = '\0';
+		}
+		else
+		{
+			output = new char[data.size()];
+		}
+
+		for (uint32_t i = 0; i < data.size(); i++)
+			output[i] = data[i];
+
+		return output;
+	}
+
 	inline static void GrabDataSectionItems(const std::string &dataSection, ParseOutput &output)
 	{
 		std::stringstream ss;
@@ -370,100 +477,70 @@ namespace Parser
 		uint32_t dataSectionStart = 0; // to be added later to be the start of the memory
 		while (!ss.eof())
 		{
-			std::string line;
-			std::getline(ss, line);
-			// to be implemented after implementing the directives class (data section of the program)
-			if (uint32_t index = line.find(":"); index != std::string::npos)
+			std::string label, type, data;
+			std::getline(ss, label);
+			std::getline(ss, type);
+			std::getline(ss, data);
+			if (label.size() < 2)
+				break;
+			label.pop_back();
+			uint32_t size = 0;
+			uint32_t multiplier = 1;
+			if (type == ".ascii")
 			{
-				std::string label = line.substr(0, index);
-				if (std::regex_match(label, std::regex("([a-zA-Z_][a-zA-Z0-9_]*)")))
-				{
-					DataLabel dataLbl;
-					dataLbl.labelString = label;
-					std::string dataLine;
-					std::getline(ss, dataLine);
-					if (uint32_t dotIndex = dataLine.find("."); dotIndex != std::string::npos)
-					{
-						uint32_t spaceIndex = 0;
-						for (uint32_t i = dotIndex + 1; i < dataLine.size(); i++)
-							if (dataLine[i] == ' ')
-							{
-								spaceIndex = i;
-								break;
-							}
-						if (spaceIndex == 0)
-						{
-							output.err = {ErrorMessage::INVALID_DIRECTIVE, "Directive was not specified: %s", dataLine};
-							return;
-						}
-						std::string directive = dataLine.substr(dotIndex + 1, spaceIndex - dotIndex);
-						std::string directiveData = dataLine.substr(spaceIndex, -1);
-						if (directive == "asciz" || directive == "string")
-						{
-							if (std::regex_match(directiveData, std::regex("(\"[\\s\\S]*\")")))
-							{
-								dataLbl.data = directiveData;
-							}
-							else
-							{
-								output.err = {ErrorMessage::INVALID_DIRECTIVE, "Directive was not specified: %s", dataLine};
-								return;
-							}
-						}
-						else if (directive == "word")
-						{
-							for (auto &c : directiveData)
-							{
-								if (!isdigit(c) && c != ' ')
-								{
-									output.err = {ErrorMessage::INVALID_DIRECTIVE, "Directive was not specified: %s", dataLine};
-									return;
-								}
-							}
-							dataLbl.data = directiveData;
-						}
-						else if (directive == "byte")
-						{
-						}
-						else if (directive == "half")
-						{
-						}
-						else if (directive == "ascii")
-						{
-						}
-						else if (directive == "space")
-						{
-						}
-						else if (directive == "double")
-						{
-						}
-						else if (directive == "float")
-						{
-						}
-						else
-						{
-							output.err = {ErrorMessage::INVALID_DIRECTIVE, "Directive was not specified: %s", dataLine};
-							return;
-						}
-					}
-					else
-					{
-						output.err = {ErrorMessage::INVALID_DIRECTIVE, "Directive was not specified: %s", dataLine};
-						return;
-					}
-					output.dataLabels.push_back(dataLbl);
-				}
-				else
-				{
-					output.err = {ErrorMessage::INVALID_LABEL, "Invalid Label: %s", label};
-					return;
-				}
+				data.pop_back();
+				data.erase(data.begin());
+				size = data.size();
+				void *finalData = (void *)getStringFromDataItem(data, false);
+				output.dataSection.AddItem(label, RISC::DataItem::STRING, size, finalData);
+				multiplier = 1;
 			}
-			else
+			else if (type == ".string" || type == ".asciz")
 			{
-				// There is an error in the string.
-				continue;
+				data.pop_back();
+				data.erase(data.begin());
+				size = data.size() + 1;
+				void *finalData = (void *)getStringFromDataItem(data, true);
+				output.dataSection.AddItem(label, RISC::DataItem::C_STRING, size, finalData);
+				multiplier = 1;
 			}
+			else if (type == ".word")
+			{
+				void *finalData = (void *)getArrayFromDataItem<uint32_t>(data, size);
+				output.dataSection.AddItem(label, RISC::DataItem::WORD, size, finalData);
+				multiplier = 4;
+			}
+			else if (type == ".half")
+			{
+				void *finalData = (void *)getArrayFromDataItem<uint16_t>(data, size);
+				output.dataSection.AddItem(label, RISC::DataItem::HALF_WORD, size, finalData);
+				multiplier = 2;
+			}
+			else if (type == ".byte")
+			{
+				void *finalData = (void *)getArrayFromDataItem<uint8_t>(data, size);
+				output.dataSection.AddItem(label, RISC::DataItem::BYTE, size, finalData);
+				multiplier = 1;
+			}
+			else if (type == ".double")
+			{
+				void *finalData = (void *)getArrayFromDataItem<double>(data, size, 2);
+				output.dataSection.AddItem(label, RISC::DataItem::DOUBLE, size, finalData);
+				multiplier = 8;
+			}
+			else if (type == ".float")
+			{
+				void *finalData = (void *)getArrayFromDataItem<float>(data, size, 1);
+				output.dataSection.AddItem(label, RISC::DataItem::FLOAT, size, finalData);
+				multiplier = 4;
+			}
+			else if (type == ".space")
+			{
+				void *finalData = (void *)getArrayFromDataItem<uint32_t>(data, size);
+				output.dataSection.AddItem(label, RISC::DataItem::SPACE, size, finalData);
+				multiplier = 4;
+			}
+			output.dataSectionSize += (size * multiplier);
 		}
 	}
 
@@ -543,10 +620,11 @@ namespace Parser
 
 	inline static void GrabInstructions(const std::string &textSection, ParseOutput &output)
 	{
+		using namespace RISC;
+
 		std::stringstream ss;
 		ss << textSection;
 		uint32_t lineNumber = 0;
-
 		auto &instTypes = Instruction::typeNames;
 
 		while (!ss.eof())
@@ -767,7 +845,7 @@ namespace Parser
 			if (startOfTextSection == std::string::npos || endOfTextSection != std::string::npos)
 			{
 				printf("startOfTextSection: %d, end: %d\n", startOfTextSection, endOfTextSection);
-				output.err = {ErrorMessage::INVALID_STRUCTURE_TEXT, "There is more than one text section. (There should beo nly one data section"};
+				output.err = {ErrorMessage::INVALID_STRUCTURE_TEXT, "There is more than one text section. (There should be only one textx section"};
 				return output;
 			}
 		}
@@ -810,19 +888,25 @@ namespace Parser
 	ParseOutput Parser::Parse()
 	{
 		ParseOutput output;
-
+		SanitizeFileContent(m_ParsableFile, true);
 		auto files = GenerateTextAndData(m_ParsableFile);
-		std::cout << "Starting sanitization\n";
-		// GrabLabels(m_ParsableFile, output);
+		if (files.err)
+		{
+			std::cout << "Generation err: " << files.err << std::endl;
+			exit(1);
+		}
 		auto err = SanitizeDataSection(files.dataSection);
-		std::cout << files.dataSection << std::endl;
 		if (err)
 		{
 			std::cout << "err: " << err << std::endl;
-			exit(0);
+			exit(1);
 		}
-		// GrabDataSectionItems(files.dataSection, output);
-		// GrabInstructions(files.textSection, output);
+		GrabDataSectionItems(files.dataSection, output);
+		GrabInstructions(files.textSection, output);
+
+		output.dataSection.Print();
+		std::cout << "Data Section Size: " << output.dataSectionSize << std::endl;
+
 		// std::cout << "LABELS:\n";
 		// for (auto &label : output.labels)
 		// {
@@ -831,6 +915,4 @@ namespace Parser
 		// std::cout << "\n";
 		return output;
 	}
-
-	const std::string g_Delimnators = ":#().,";
 }

@@ -11,15 +11,9 @@
 int main(int argc, const char *argv[])
 {
 	const std::string filePath = std::string(RESOURCES_DIR) + std::string("/testfile.txt");
-	std::cout << filePath << std::endl;
 	Parser::Parser parser;
-	std::cout << "Parsable Data:\n";
 	if (parser.ReadFile(filePath))
 	{
-		std::cout << "\nFormatted Data:\n\n";
-		parser.FormatFile();
-		parser.PrintFileContent();
-		std::cout << "\n";
 		auto parsedData = parser.Parse();
 		if (parsedData.err)
 		{
@@ -29,7 +23,7 @@ int main(int argc, const char *argv[])
 		std::cout << "INSTRUCTIONS:\n";
 		for (auto &inst : parsedData.instructions)
 		{
-			std::string fmt = Instruction::FormatInstruction(inst);
+			std::string fmt = RISC::Instruction::FormatInstruction(inst);
 
 			std::cout << fmt << std::endl;
 		}
