@@ -24,17 +24,16 @@ RISC32I
   - Not entirely, just the text section
   - The data section is NEXT
   - The macros and the other directives will be NEXT
-- Parsing the data section so far is correct, but we don't get the data inside the application yet.
+- Parsing the data section so far is correct, and we get the data in a contianer that is easily traversed
 
 # Next STEPS:
 
-- Getting the data section to be parsed correctly.
+- Dumping the instructions in binary format.
+- Disassembling the binary format to readable assembly instructions. (NO DATA SECTION, NOT NECC. WORKING CODE, JUST INSTRUCTIONS DISASSEMBLED)
 - Pre-processing stage:
   - Parsing labels and putting them with the right address (both instructions and data).
   - Parsing Macros.
   - Include files. (Labels change their names to UNIQUE identifiers that are acceptable and created by the preprocessor "file_name_label_name")
-- Dumping the instructions in binary format.
-- Disassembling the binary format to readable assembly instructions. (NO DATA SECTION, NOT NECC. WORKING CODE, JUST INSTRUCTIONS DISASSEMBLED)
 - Getting all the directives to work.
 - Starting the simulation. (very big step)
 - Making sure it works.
