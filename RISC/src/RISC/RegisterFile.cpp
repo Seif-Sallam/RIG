@@ -84,6 +84,7 @@ namespace RISC
 	{
 		auto regName = Instance().GetTrueRegName(reg);
 		uint32_t index = Instance().trueToIndexMap[regName];
+		return index;
 	}
 
 	RegisterFile::RegisterFile()

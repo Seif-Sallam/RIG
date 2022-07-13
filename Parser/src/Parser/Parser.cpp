@@ -647,7 +647,7 @@ namespace Parser
 			{
 				Instruction inst(name);
 				inst.lineNumber = lineNumber;
-				auto type = inst.WriteType();
+				auto type = inst.writeType;
 				char rd[8] = {0}, rs1[8] = {0}, rs2[8] = {0}, imm[16] = {0};
 				switch (type)
 				{

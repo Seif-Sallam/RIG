@@ -137,17 +137,19 @@ namespace RISC
 	};
 
 	Instruction::Instruction(const std::string &type)
-		: rs1(0), rs2(0), rd(0), imm(0), instType(type)
+		: rs1(0), rs2(0), rd(0), imm(0), instName(type)
 	{
-		this->instType = type;
-		for (auto &c : this->instType)
+		this->instName = type;
+		for (auto &c : this->instName)
 			c = toupper(c);
-		if (auto it = operationsTable.find(instType.c_str()); it != operationsTable.end())
+		if (auto it = operationsTable.find(instName.c_str()); it != operationsTable.end())
 		{
 			m_Operation = it->second;
 		}
 		else
 			m_Operation = nullptr;
+
+		WriteType();
 	}
 
 	bool Instruction::Operate()
@@ -219,30 +221,31 @@ namespace RISC
 		"EBREAK",
 	};
 
-	InstType Instruction::WriteType()
+	void Instruction::WriteType()
 	{
-		auto &name = this->instType;
+		auto &name = this->instName;
 		if (name == "LUI" || name == "AUIPC" || name == "JAL")
-			return TYPE1;
-		if (name == "JALR" || std::find(g_LType.begin(), g_LType.end(), name) != g_LType.end())
-			return TYPE2;
-		if (std::find(g_SType.begin(), g_SType.end(), name) != g_SType.end())
-			return TYPE3;
-		if (std::find(g_RType.begin(), g_RType.end(), name) != g_RType.end())
-			return TYPE4;
-		if (std::find(g_IType.begin(), g_IType.end(), name) != g_IType.end())
-			return TYPE5;
-		if (std::find(g_EnvType.begin(), g_EnvType.end(), name) != g_EnvType.end())
-			return TYPE6;
-		if (std::find(g_BType.begin(), g_BType.end(), name) != g_BType.end())
-			return TYPE7;
-		return INVALID;
+			writeType = TYPE1;
+		else if (name == "JALR" || std::find(g_LType.begin(), g_LType.end(), name) != g_LType.end())
+			writeType = TYPE2;
+		else if (std::find(g_SType.begin(), g_SType.end(), name) != g_SType.end())
+			writeType = TYPE3;
+		else if (std::find(g_RType.begin(), g_RType.end(), name) != g_RType.end())
+			writeType = TYPE4;
+		else if (std::find(g_IType.begin(), g_IType.end(), name) != g_IType.end())
+			writeType = TYPE5;
+		else if (std::find(g_EnvType.begin(), g_EnvType.end(), name) != g_EnvType.end())
+			writeType = TYPE6;
+		else if (std::find(g_BType.begin(), g_BType.end(), name) != g_BType.end())
+			writeType = TYPE7;
+		else
+			writeType = INVALID;
 	}
 
 	const std::string Instruction::FormatInstruction(Instruction &inst)
 	{
-		std::string output = inst.instType;
-		const InstType type = inst.WriteType();
+		std::string output = inst.instName;
+		const InstWritingType type = inst.writeType;
 		char format[1024];
 		memset(format, 0, 1024);
 		int n = 0;

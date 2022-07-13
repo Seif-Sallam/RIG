@@ -4,7 +4,7 @@
 
 namespace RISC
 {
-	enum InstType
+	enum InstWritingType
 	{
 		TYPE1, // inst rd, imm
 		TYPE2, // inst rd, imm(rs1)
@@ -24,13 +24,14 @@ namespace RISC
 		static const std::vector<const char *> typeNames;
 
 		uint32_t rs1, rs2, rd, imm;
-		std::string instType;
+		std::string instName;
 		uint32_t lineNumber = 0;
 		uint32_t address;
-		InstType WriteType();
+		InstWritingType writeType;
 		static const std::string FormatInstruction(Instruction &inst);
 
 	private:
+		void WriteType();
 		bool (*m_Operation)(Instruction &);
 	};
 }
