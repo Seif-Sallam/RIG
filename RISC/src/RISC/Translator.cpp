@@ -238,14 +238,13 @@ namespace RISC
 		Format iInstruction;
 		iInstruction.opcode = 0b0010011;
 		iInstruction.funct3 = g_InstToFunc3.at(instruction.instName);
-		iInstruction.funct7 = g_InstToFunc7.at(instruction.instName);
 		iInstruction.rs1 = instruction.rs1;
 		iInstruction.imm = instruction.imm;
 		if (instruction.instName == "SRAI")
 			iInstruction.imm |= (0b0100000 << 5);
 		iInstruction.rd = instruction.rd;
 
-		output = AssembleType(iInstruction, rType);
+		output = AssembleType(iInstruction, iType);
 	}
 
 	inline static void AssembleSType(Instruction &instruction, uint32_t &output)
@@ -308,6 +307,7 @@ namespace RISC
 	uint32_t Translator::Assemble(Instruction &instruction)
 	{
 		const auto &n = instruction.instName;
+		std::cout << "Name: " << n << std::endl;
 		uint32_t output = 0;
 		IF_ALL_EQ_DO(
 			n, { AssembleUType(instruction, output); return output; }, "LUI", "AUIPC");

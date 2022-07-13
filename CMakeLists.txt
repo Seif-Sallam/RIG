@@ -16,4 +16,5 @@ set(CMAKE_CXX_STANDARD 17)
 
 add_subdirectory(RISC)
 add_subdirectory(Parser)
+add_subdirectory(Assembler)
 add_subdirectory(Rig)

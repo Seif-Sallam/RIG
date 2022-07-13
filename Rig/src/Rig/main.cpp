@@ -10,7 +10,7 @@
 
 int main(int argc, const char *argv[])
 {
-	const std::string filePath = std::string(RESOURCES_DIR) + std::string("/testfile.txt");
+	const std::string filePath = std::string(RESOURCES_DIR) + std::string("testfile.txt");
 	Parser::Parser parser;
 	if (parser.ReadFile(filePath))
 	{

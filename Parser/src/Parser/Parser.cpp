@@ -124,9 +124,6 @@ namespace Parser
 
 					if (foundWhiteSpace)
 						startComment = whiteSpaceStart;
-
-					{
-					}
 				}
 				inComment = true;
 
