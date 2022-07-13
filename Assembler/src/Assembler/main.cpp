@@ -24,8 +24,8 @@ int main(int argc, char const *argv[])
 	for (uint32_t i = 2; i < argc; i++)
 	{
 		Parser::Parser parser;
-		bool failed = parser.ReadFile(argv[i]);
-		if (!failed)
+		bool success = parser.ReadFile(argv[i]);
+		if (!success)
 		{
 			std::cerr << "failed to open the file: " << argv[i] << std::endl;
 			continue;
