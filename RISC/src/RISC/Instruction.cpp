@@ -49,7 +49,6 @@ namespace RISC
 	inline static bool LUI_32(Instruction &self) { return true; }
 	inline static bool AUIPC_32(Instruction &self) { return true; }
 	inline static bool ECALL(Instruction &self) { return true; }
-	inline static bool FENCE(Instruction &self) { return true; }
 	inline static bool EBREAK(Instruction &self) { return true; }
 
 	const std::vector<const char *>
@@ -91,7 +90,6 @@ namespace RISC
 			"LUI",
 			"AUIPC",
 			"ECALL",
-			"FENCE",
 			"EBREAK"};
 
 	static const std::unordered_map<const char *, bool (*)(Instruction &)> operationsTable{
@@ -132,7 +130,6 @@ namespace RISC
 		TABLE_ENTRY(LUI_32),
 		TABLE_ENTRY(AUIPC_32),
 		TABLE_ENTRY(ECALL),
-		TABLE_ENTRY(FENCE),
 		TABLE_ENTRY(EBREAK),
 	};
 
@@ -217,7 +214,6 @@ namespace RISC
 
 	static const std::vector<std::string> g_EnvType = {
 		"ECALL",
-		"FENCE",
 		"EBREAK",
 	};
 

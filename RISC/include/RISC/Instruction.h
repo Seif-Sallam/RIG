@@ -11,7 +11,7 @@ namespace RISC
 		TYPE3, // inst rs2, imm(rs1)
 		TYPE4, // inst rd, rs1, rs2
 		TYPE5, // inst rd, rs1, imm
-		TYPE6, // ecall / fence / ebreak
+		TYPE6, // ecall / ebreak
 		TYPE7, // inst rs1, rs2, imm
 		INVALID
 	};

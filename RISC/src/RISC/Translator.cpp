@@ -124,7 +124,6 @@ namespace RISC
 		{"SRA", 5},
 		{"OR", 6},
 		{"AND", 7},
-		{"FENCE", 0},
 		{"ECALL", 0},
 		{"EBREAK", 0}};
 
@@ -322,7 +321,7 @@ namespace RISC
 		IF_ALL_EQ_DO(
 			n, { AssembleSType(instruction, output); return output; }, "SB", "SH", "SW");
 		IF_ALL_EQ_DO(
-			n, { AssembleEnvType(instruction, output); return output; }, "FENCE", "ECALL", "EBREAK");
+			n, { AssembleEnvType(instruction, output); return output; }, "ECALL", "EBREAK");
 		return output;
 	}
 

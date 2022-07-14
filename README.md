@@ -27,10 +27,10 @@ RISC32I
   - The data section is NEXT
   - The macros and the other directives will be NEXT
 - Parsing the data section so far is correct, and we get the data in a contianer that is easily traversed
+- Dumping the instructions in binary / hexadecimal / ascii binary.
 
 # Next STEPS:
 
-- Dumping the instructions in binary format.
 - Disassembling the binary format to readable assembly instructions. (NO DATA SECTION, NOT NECC. WORKING CODE, JUST INSTRUCTIONS DISASSEMBLED)
 - Pre-processing stage:
   - Parsing labels and putting them with the right address (both instructions and data).

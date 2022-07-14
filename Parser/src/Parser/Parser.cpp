@@ -13,6 +13,81 @@
 
 namespace Parser
 {
+
+	inline static bool IsInteger(const char *value)
+	{
+		bool hex = false;
+		bool isBinary = false;
+
+		if (value[0] == '0' && tolower(value[1]) == 'x')
+			hex = true;
+		if (value[0] == '0' && tolower(value[1]) == 'b')
+			isBinary = true;
+
+		uint32_t start = (hex || isBinary) ? 2 : 0;
+
+		for (auto p = value + 2; *p != '\0'; p++)
+		{
+			char c = *p;
+			c = tolower(c);
+			if (isBinary)
+			{
+				if (!(c == '0' || c == '1'))
+					return false;
+			}
+			else if (hex == true)
+			{
+				if (!isdigit(c) && (c > 'f' || c < 'a'))
+					return false;
+			}
+			else
+			{
+				if (!isdigit(c))
+					return false;
+			}
+		}
+		return true;
+	}
+
+	inline static uint32_t GetInteger(const char *imm, uint32_t size)
+	{
+		uint32_t sum = 0;
+		uint32_t base = 10;
+		uint32_t pos = 0;
+		bool isHex = false;
+		bool isBinary = false;
+		if (imm[0] == '0' && tolower(imm[1]) == 'x')
+		{
+			base = 16;
+			isHex = true;
+		}
+		if (imm[0] == '0' && tolower(imm[1]) == 'b')
+		{
+			base = 2;
+			isBinary = true;
+		}
+		int32_t start = (isHex || isBinary) ? 2 : 0;
+		for (int32_t i = size - 1; i >= start; i--)
+		{
+			char c = imm[i];
+			if (c == '\0')
+				continue;
+			c = tolower(c);
+
+			uint32_t value = c - '0';
+			if (isHex)
+			{
+				if (isalpha(c))
+					value = c - 'a' + 10;
+			}
+
+			sum += value * pow(base, pos);
+			pos++;
+		}
+
+		return sum;
+	}
+
 	Parser::Parser()
 		: m_FileContent("")
 	{
@@ -215,9 +290,6 @@ namespace Parser
 			AddNewLineAfter(fileContent, ".macro");
 			AddNewLineAfter(fileContent, ".end_macro");
 		}
-
-		std::cout << "Santitized File:\n"
-				  << fileContent << std::endl;
 	}
 
 	ErrorMessage Parser::SanitizeDataSection(std::string &dataSection)
@@ -241,10 +313,11 @@ namespace Parser
 			std::string directive;
 			std::getline(ss, directive);
 			std::string data;
-			uint32_t spaceIndex = directive.find(" ");
-			data = directive.substr(spaceIndex + 1);
-			directive = directive.substr(0, spaceIndex);
-
+			{
+				uint32_t spaceIndex = directive.find(" ");
+				data = directive.substr(spaceIndex + 1);
+				directive = directive.substr(0, spaceIndex);
+			}
 			if (directive == ".asciz" || directive == ".ascii" || directive == ".string")
 			{
 				uint32_t numOfQuotes = 0;
@@ -278,15 +351,28 @@ namespace Parser
 				// TODO: Use IsInteger function here to support the other integer types :D
 				//  It is either a comma seperated values or a space seperated ones.
 				//  So we will remove all the commas and make sure it is only spaces
+
 				for (uint32_t i = 0; i < data.size(); i++)
 				{
 					char &c = data[i];
 					if (c == ',')
 						c = char(27);
-					else if (isdigit(c) || c == ' ')
-						continue;
-					else
-						return ErrorMessage{ErrorMessage::INVALID_DIRECTIVE_DATA, "Invalid directive data (Found alpha and expected numbers): %s\n\tat index: %u", data.c_str(), i};
+				}
+				data.erase(std::remove_if(data.begin(), data.end(), [](const char &c)
+										  { return c == char(27); }),
+						   data.end());
+
+				int32_t spaceIndex = data.find(" ");
+				uint32_t lastIndex = 0;
+				while (spaceIndex != std::string::npos)
+				{
+					std::string num = data.substr(lastIndex, spaceIndex - lastIndex);
+					if (!IsInteger(num.c_str()))
+					{
+						return ErrorMessage{ErrorMessage::INVALID_DIRECTIVE_DATA, "Invalid directive data. Number is not integer: %s", num.c_str()};
+					}
+					lastIndex = spaceIndex + 1;
+					spaceIndex = data.find(" ", lastIndex);
 				}
 			}
 			else if (directive == ".space")
@@ -295,10 +381,23 @@ namespace Parser
 				for (uint32_t i = 0; i < data.size(); i++)
 				{
 					char &c = data[i];
-					if (isdigit(c))
+					if (isdigit(c) || c == 'x' || c == 'b')
 						continue;
-					else
-						return ErrorMessage{ErrorMessage::INVALID_DIRECTIVE_DATA, "Invalid directive data (Found alpha and expected numbers): %s\n\tat index: %u", data.c_str(), i};
+				}
+				data.erase(std::remove_if(data.begin(), data.end(), [](const char &c)
+										  { return c == char(27); }),
+						   data.end());
+				int32_t spaceIndex = data.find(" ");
+				uint32_t lastIndex = 0;
+				while (spaceIndex != std::string::npos)
+				{
+					std::string num = data.substr(lastIndex, spaceIndex - lastIndex);
+					if (!IsInteger(num.c_str()))
+					{
+						return ErrorMessage{ErrorMessage::INVALID_DIRECTIVE_DATA, "Invalid directive data. Number is not integer: %s", num.c_str()};
+					}
+					lastIndex = spaceIndex + 1;
+					spaceIndex = data.find(" ", lastIndex);
 				}
 			}
 			else if (directive == ".float" || directive == ".double")
@@ -314,15 +413,14 @@ namespace Parser
 					else
 						return ErrorMessage{ErrorMessage::INVALID_DIRECTIVE_DATA, "Invalid directive data (Found alpha and expected numbers): %s\n\tat index: %u", data.c_str(), i};
 				}
+				data.erase(std::remove_if(data.begin(), data.end(), [](const char &c)
+										  { return c == char(27); }),
+						   data.end());
 			}
 			else
 			{
 				return ErrorMessage{ErrorMessage::INVALID_DIRECTIVE, "Invalid Directive (Directive not supported): %s", directive.c_str()};
 			}
-			// Erase the removable characters
-			data.erase(std::remove_if(data.begin(), data.end(), [](const char &c)
-									  { return c == char(27); }),
-					   data.end());
 
 			finalDataSection += directive + "\n" + data + "\n";
 			// Structure will be like:
@@ -333,9 +431,6 @@ namespace Parser
 			*/
 		}
 		dataSection = finalDataSection;
-		std::cout << "Finnal Data Section: \n";
-		std::cout << dataSection << std::endl;
-
 		return ErrorMessage{ErrorMessage::NO_ERROR, "NO ERR"};
 	}
 
@@ -385,7 +480,7 @@ namespace Parser
 			}
 			else
 			{
-				arr[i] = (T)std::stoul(number);
+				arr[i] = GetInteger(number.c_str(), number.size());
 			}
 
 			lastIndex = space + 1;
@@ -539,80 +634,6 @@ namespace Parser
 			}
 			output.dataSectionSize += (size * multiplier);
 		}
-	}
-
-	inline static bool IsInteger(char *value)
-	{
-		bool hex = false;
-		bool isBinary = false;
-
-		if (value[0] == '0' && tolower(value[1]) == 'x')
-			hex = true;
-		if (value[0] == '0' && tolower(value[1]) == 'b')
-			isBinary = true;
-
-		uint32_t start = (hex || isBinary) ? 2 : 0;
-
-		for (auto p = value + 2; *p != '\0'; p++)
-		{
-			char c = *p;
-			c = tolower(c);
-			if (isBinary)
-			{
-				if (!(c == '0' || c == '1'))
-					return false;
-			}
-			else if (hex == true)
-			{
-				if (!isdigit(c) && (c > 'f' || c < 'a'))
-					return false;
-			}
-			else
-			{
-				if (!isdigit(c))
-					return false;
-			}
-		}
-		return true;
-	}
-
-	inline static uint32_t GetInteger(char *imm, uint32_t size)
-	{
-		uint32_t sum = 0;
-		uint32_t base = 10;
-		uint32_t pos = 0;
-		bool isHex = false;
-		bool isBinary = false;
-		if (imm[0] == '0' && tolower(imm[1]) == 'x')
-		{
-			base = 16;
-			isHex = true;
-		}
-		if (imm[0] == '0' && tolower(imm[1]) == 'b')
-		{
-			base = 2;
-			isBinary = true;
-		}
-		int32_t start = (isHex || isBinary) ? 2 : 0;
-		for (int32_t i = size - 1; i >= start; i--)
-		{
-			char c = imm[i];
-			if (c == '\0')
-				continue;
-			c = tolower(c);
-
-			uint32_t value = c - '0';
-			if (isHex)
-			{
-				if (isalpha(c))
-					value = c - 'a' + 10;
-			}
-
-			sum += value * pow(base, pos);
-			pos++;
-		}
-
-		return sum;
 	}
 
 	inline static void GrabInstructions(const std::string &textSection, ParseOutput &output)
@@ -777,7 +798,7 @@ namespace Parser
 					output.instructions.push_back(inst);
 				}
 				break;
-				case TYPE6: // ecall / fence / ebreak
+				case TYPE6: // ecall / ebreak
 				{
 					output.instructions.push_back(inst);
 				}
@@ -810,19 +831,18 @@ namespace Parser
 				}
 				break;
 				default: // INVALID
-					output.err = {ErrorMessage::INVALID_INSTRUCTION, "Unsupported instruction: Did you write it correctly?\n\t %s", inst};
+					output.err = {ErrorMessage::INVALID_INSTRUCTION, "Unsupported instruction: Did you write it correctly?\n\t %s", inst.instName.c_str()};
 					return;
 					break;
 				}
 			}
 			else
-				output.err = {ErrorMessage::INVALID_INSTRUCTION, "Unsupported instruction: Did you write it correctly?\n\t %s", line};
+				output.err = {ErrorMessage::INVALID_INSTRUCTION, "Unsupported instruction: Did you write it correctly?\n\t %s", line.c_str()};
 		}
 	}
 
 	Parser::FileText Parser::GenerateTextAndData(const std::string &fileContent)
 	{
-		std::cout << "Parsing text and data\n";
 		Parser::FileText output;
 		int32_t startOfDataSection = fileContent.find(".data");
 		{
@@ -878,7 +898,6 @@ namespace Parser
 				textSection = fileContent.substr(start);
 			}
 		}
-		std::cout << "Finished\n";
 		return output;
 	}
 
@@ -889,27 +908,18 @@ namespace Parser
 		auto files = GenerateTextAndData(m_ParsableFile);
 		if (files.err)
 		{
-			std::cout << "Generation err: " << files.err << std::endl;
+			std::cerr << "Generation err: " << files.err << std::endl;
 			exit(1);
 		}
 		auto err = SanitizeDataSection(files.dataSection);
 		if (err)
 		{
-			std::cout << "err: " << err << std::endl;
+			std::cerr << "err: " << err << std::endl;
 			exit(1);
 		}
 		GrabDataSectionItems(files.dataSection, output);
 		GrabInstructions(files.textSection, output);
 
-		output.dataSection.Print();
-		std::cout << "Data Section Size: " << output.dataSectionSize << std::endl;
-
-		// std::cout << "LABELS:\n";
-		// for (auto &label : output.labels)
-		// {
-		// 	std::cout << label << "\n";
-		// }
-		// std::cout << "\n";
 		return output;
 	}
 }

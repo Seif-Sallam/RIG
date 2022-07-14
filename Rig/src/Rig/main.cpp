@@ -10,7 +10,7 @@
 
 int main(int argc, const char *argv[])
 {
-	const std::string filePath = std::string(RESOURCES_DIR) + std::string("testfile.txt");
+	const std::string filePath = std::string(RESOURCES_DIR) + std::string("/testfile.txt");
 	Parser::Parser parser;
 	if (parser.ReadFile(filePath))
 	{
@@ -20,6 +20,9 @@ int main(int argc, const char *argv[])
 			std::cout << "ERROR: " << parsedData.err << std::endl;
 			return 1;
 		}
+		std::cout << "Data Section: \n";
+		parsedData.dataSection.Print();
+
 		std::cout << "INSTRUCTIONS:\n";
 		for (auto &inst : parsedData.instructions)
 		{
