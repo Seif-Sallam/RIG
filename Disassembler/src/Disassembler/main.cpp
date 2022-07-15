@@ -53,6 +53,8 @@ int main(int argc, char const *argv[])
 			}
 		}
 		outputFile.open(title);
+		std::cout << ".text\n";
+		outputFile << ".text\n";
 		for (auto &inst : instructions)
 		{
 			auto str = RISC::Instruction::FormatInstruction(inst);

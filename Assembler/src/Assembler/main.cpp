@@ -23,22 +23,24 @@ int main(int argc, char const *argv[])
 	RISC::Translator translator;
 	for (uint32_t i = 2; i < argc; i++)
 	{
+		std::string file = argv[i];
+
 		Parser::Parser parser;
-		bool success = parser.ReadFile(argv[i]);
+		bool success = parser.ReadFile(file);
 		if (!success)
 		{
-			std::cerr << "failed to open the file: " << argv[i] << std::endl;
-			continue;
+			std::cerr << "failed to open the file: " << file << std::endl;
+			// continue;
 		}
 
 		auto parseOutput = parser.Parse();
 		if (parseOutput.err)
 		{
-			std::cerr << "Failed to parse the file: " << argv[i] << "\nerr: " << parseOutput.err << std::endl;
-			continue;
+			std::cerr << "Failed to parse the file: " << file << "\nerr: " << parseOutput.err << std::endl;
+			// continue;
 		}
 		std::ofstream outputFile;
-		std::string title = argv[i];
+		std::string title = file;
 		{
 			uint32_t index = title.find(".");
 			if (index != std::string::npos)

@@ -18,15 +18,16 @@ namespace Parser
 	{
 		bool hex = false;
 		bool isBinary = false;
+		bool isNegative = value[0] == '-';
 
-		if (value[0] == '0' && tolower(value[1]) == 'x')
+		if (value[0 + isNegative] == '0' && tolower(value[1 + isNegative]) == 'x')
 			hex = true;
-		if (value[0] == '0' && tolower(value[1]) == 'b')
+		else if (value[0 + isNegative] == '0' && tolower(value[1 + isNegative]) == 'b')
 			isBinary = true;
 
 		uint32_t start = (hex || isBinary) ? 2 : 0;
-
-		for (auto p = value + 2; *p != '\0'; p++)
+		start += isNegative;
+		for (auto p = value + start; *p != '\0'; p++)
 		{
 			char c = *p;
 			c = tolower(c);
@@ -56,17 +57,19 @@ namespace Parser
 		uint32_t pos = 0;
 		bool isHex = false;
 		bool isBinary = false;
-		if (imm[0] == '0' && tolower(imm[1]) == 'x')
+		bool isNegative = imm[0] == '-';
+		if (imm[0 + isNegative] == '0' && tolower(imm[1 + isNegative]) == 'x')
 		{
 			base = 16;
 			isHex = true;
 		}
-		if (imm[0] == '0' && tolower(imm[1]) == 'b')
+		if (imm[0 + isNegative] == '0' && tolower(imm[1 + isNegative]) == 'b')
 		{
 			base = 2;
 			isBinary = true;
 		}
 		int32_t start = (isHex || isBinary) ? 2 : 0;
+		start += isNegative;
 		for (int32_t i = size - 1; i >= start; i--)
 		{
 			char c = imm[i];
@@ -85,6 +88,8 @@ namespace Parser
 			pos++;
 		}
 
+		if (isNegative)
+			sum *= -1;
 		return sum;
 	}
 
@@ -671,7 +676,7 @@ namespace Parser
 				{
 				case TYPE1: // inst rd, imm
 				{
-					int n = sscanf(line.c_str(), "%*[A-Z] %[A-Za-z0-9], %[A-Za-z0-9]", rd, imm);
+					int n = sscanf(line.c_str(), "%*[A-Z] %[A-Za-z0-9], %[A-Za-z0-9-]", rd, imm);
 					if (n < 2)
 					{
 						output.err = {ErrorMessage::INVALID_PARAMETERS, "Expected format <Instruction> <rd>, <imm>; Instruction: %s", name.c_str()};
@@ -694,7 +699,7 @@ namespace Parser
 				break;
 				case TYPE2: // inst rd, imm(rs1)
 				{
-					int n = sscanf(line.c_str(), "%*[A-Z] %[A-Za-z0-9], %[A-Za-z0-9](%[A-Za-z0-9])", rd, imm, rs1);
+					int n = sscanf(line.c_str(), "%*[A-Z] %[A-Za-z0-9], %[A-Za-z0-9-](%[A-Za-z0-9])", rd, imm, rs1);
 					if (n < 3)
 					{
 						output.err = {ErrorMessage::INVALID_PARAMETERS, "Expected format <Instruction> <rd>, <imm>(<rs1>); Instruction: %s", name.c_str()};
@@ -720,7 +725,7 @@ namespace Parser
 				break;
 				case TYPE3: // inst rs2, imm(rs1)
 				{
-					int n = sscanf(line.c_str(), "%*[A-Z] %[A-Za-z0-9], %[A-Za-z0-9](%[A-Za-z0-9])", rs2, imm, rs1);
+					int n = sscanf(line.c_str(), "%*[A-Z] %[A-Za-z0-9], %[A-Za-z0-9-](%[A-Za-z0-9])", rs2, imm, rs1);
 					if (n < 3)
 					{
 						output.err = {ErrorMessage::INVALID_PARAMETERS, "Expected format <Instruction> <rs2>, <imm>(<rs1>); Instruction: %s", name.c_str()};
@@ -773,7 +778,7 @@ namespace Parser
 				break;
 				case TYPE5: // inst rd, rs1, imm
 				{
-					int n = sscanf(line.c_str(), "%*[A-Z] %[A-Za-z0-9], %[A-Za-z0-9], %[A-Za-z0-9]", rd, rs1, imm);
+					int n = sscanf(line.c_str(), "%*[A-Z] %[A-Za-z0-9], %[A-Za-z0-9], %[A-Za-z0-9-]", rd, rs1, imm);
 					if (n < 3)
 					{
 						output.err = ErrorMessage(ErrorMessage::INVALID_PARAMETERS, "Expected format <Instruction> <rd>, <rs1>, <imm>; Instruction: %s", name.c_str());
@@ -805,7 +810,7 @@ namespace Parser
 				break;
 				case TYPE7: // inst rs1, rs2, imm
 				{
-					int n = sscanf(line.c_str(), "%*[A-Z] %[A-Za-z0-9], %[A-Za-z0-9], %[A-Za-z0-9]", rs1, rs2, imm);
+					int n = sscanf(line.c_str(), "%*[A-Z] %[A-Za-z0-9], %[A-Za-z0-9], %[A-Za-z0-9-]", rs1, rs2, imm);
 					if (n < 3)
 					{
 						output.err = {ErrorMessage::INVALID_PARAMETERS, "Expected format <Instruction> <rs1>, <rs2>, <imm/Label>; Instruction: %s", name.c_str()};

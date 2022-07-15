@@ -42,3 +42,6 @@ RISC32I
 - CONCURRENTLY:
   - Support compressed && multiplication instructions.
   - Start with the graphics.
+
+## Problems:
+  Constructing the J Imm in Assembling stage

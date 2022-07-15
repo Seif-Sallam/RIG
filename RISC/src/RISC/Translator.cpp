@@ -118,6 +118,7 @@ namespace RISC
 		{"ANDI", 0b111},
 		{"SLLI", 0b001},
 		{"SRLI", 0b101},
+		{"JALR", 0},
 		{"ADD", 0},
 		{"SUB", 0},
 		{"SLL", 1},
@@ -204,29 +205,32 @@ namespace RISC
 		// b => bits1_4
 		// c => bits5_10
 		// d => bit12
-		uint32_t output = (bit11 >> 11) | (bits1_4) | bits5_10 | bit12 >> 1;
+		uint32_t output = (bit11 >> 11) | (bits1_4) | bits5_10 | bit12;
 		return output;
 	}
 
 	inline static uint32_t ConstructJImm(uint32_t imm)
 	{
-		uint32_t bits12_19 = ExtractBitsFromUint(imm, 12, 19);
-		uint32_t bit11 = ExtractBitsFromUint(imm, 11, 11);
-		uint32_t bits1_10 = ExtractBitsFromUint(imm, 1, 10);
-		uint32_t bit20 = ExtractBitsFromUint(imm, 20, 20);
+		uint32_t bits12_19 = ExtractBitsFromUint(imm, 12, 19, true);
+		uint32_t bit11 = ExtractBitsFromUint(imm, 11, 11, true);
+		uint32_t bits1_10 = ExtractBitsFromUint(imm, 1, 10, true);
+		uint32_t bit20 = ExtractBitsFromUint(imm, 20, 20, true);
 		//[d][c][b][a]
-		// a => bit12_19
+		// a => bits12_19
 		// b => bit11
 		// c => bits1_10
 		// d => bit20
-		uint32_t output = (bits12_19 >> 12) | (bit11 >> 3) | (bits1_10 << 8) | bit20;
+		bit11 <<= 8;
+		bits1_10 <<= 9;
+		bit20 <<= 19;
+		uint32_t output = bits1_10 | bits12_19 | bit11 | bit20;
 		return output;
 	}
 
 	inline static void AssembleRType(Instruction &instruction, uint32_t &output)
 	{
 		Format rInstruction;
-		rInstruction.opcode = 0b0110011;
+		rInstruction.opcode = OPCODE_Arith_R;
 		rInstruction.funct3 = g_InstToFunc3.at(instruction.instName);
 		rInstruction.funct7 = g_InstToFunc7.at(instruction.instName);
 		rInstruction.rs1 = instruction.rs1;
@@ -239,7 +243,11 @@ namespace RISC
 	inline static void AssembleIType(Instruction &instruction, uint32_t &output)
 	{
 		Format iInstruction;
-		iInstruction.opcode = 0b0010011;
+		iInstruction.opcode = OPCODE_Arith_I;
+		if (instruction.instName == "JALR")
+			iInstruction.opcode = OPCODE_JALR;
+		if (instruction.instName[0] == 'L')
+			iInstruction.opcode = OPCODE_Load;
 		iInstruction.funct3 = g_InstToFunc3.at(instruction.instName);
 		iInstruction.rs1 = instruction.rs1;
 		iInstruction.imm = instruction.imm;
@@ -257,7 +265,7 @@ namespace RISC
 		sInstruction.rd = ExtractBitsFromUint(instruction.imm, 0, 4, true);
 		sInstruction.rs1 = instruction.rs1;
 		sInstruction.rs2 = instruction.rs2;
-		sInstruction.opcode = 0b0100011;
+		sInstruction.opcode = OPCODE_Store;
 		sInstruction.funct3 = g_InstToFunc3.at(instruction.instName);
 
 		output = AssembleType(sInstruction, sType);
@@ -271,7 +279,7 @@ namespace RISC
 		bInstruction.rd = imm & 0x1f;
 		bInstruction.rs1 = instruction.rs1;
 		bInstruction.rs2 = instruction.rs2;
-		bInstruction.opcode = 0b1100011;
+		bInstruction.opcode = OPCODE_Branch;
 		bInstruction.funct3 = g_InstToFunc3.at(instruction.instName);
 
 		output = AssembleType(bInstruction, bType);
@@ -281,9 +289,9 @@ namespace RISC
 	{
 		Format uInstruction;
 		if (instruction.instName == "LUI")
-			uInstruction.opcode = 0b0110111;
+			uInstruction.opcode = OPCODE_LUI;
 		else if (instruction.instName == "AUIPC")
-			uInstruction.opcode = 0b0010111;
+			uInstruction.opcode = OPCODE_AUIPC;
 		uInstruction.rd = instruction.rd;
 		uInstruction.imm = instruction.imm;
 		output = AssembleType(uInstruction, uType);
@@ -294,8 +302,7 @@ namespace RISC
 		Format jInstruction;
 		jInstruction.rd = instruction.rd;
 		jInstruction.imm = ConstructJImm(instruction.imm);
-		jInstruction.opcode = 0b1101111;
-
+		jInstruction.opcode = OPCODE_JAL;
 		output = AssembleType(jInstruction, jType);
 	}
 
@@ -310,7 +317,6 @@ namespace RISC
 	uint32_t Translator::Assemble(Instruction &instruction)
 	{
 		const auto &n = instruction.instName;
-		std::cout << "Name: " << n << std::endl;
 		uint32_t output = 0;
 		IF_ALL_EQ_DO(
 			n, { AssembleUType(instruction, output); return output; }, "LUI", "AUIPC");
@@ -331,7 +337,7 @@ namespace RISC
 
 	Instruction Translator::Dissassemble(uint32_t instruction)
 	{
-		uint32_t opcode = ExtractBitsFromUint(instruction, 0, 6); // Universal Opcode
+		uint32_t opcode = ExtractBitsFromUint(instruction, 0, 6, true); // Universal Opcode
 		uint32_t rd = ExtractBitsFromUint(instruction, 7, 11, true);
 		uint32_t funct3 = ExtractBitsFromUint(instruction, 12, 14, true);
 		uint32_t rs1 = ExtractBitsFromUint(instruction, 15, 19, true);
@@ -341,18 +347,13 @@ namespace RISC
 		int32_t iImm = int32_t(ExtractBitsFromUint(instruction, 20, 31)) >> 20;
 		int32_t sImm = rd | int32_t(ExtractBitsFromUint(instruction, 25, 31) >> 25);
 		int32_t uImm = int32_t(ExtractBitsFromUint(instruction, 12, 31)) >> 11;
-		// (((m_InstructionWord >> 7) & 0x1) << 11) |
-		// (((m_InstructionWord >> 8) & 0xF) << 1) |
-		// (((m_InstructionWord >> 25) & 0x3F) << 5) |
-		// 	((m_InstructionWord >> 31) ? 0xFFFFF000 : 0x0);
-
 		int32_t bImm = (int32_t(((rd & 1) << 11 | (rd >> 1) | (funct7 << 5)) |
 								ExtractBitsFromUint(instruction, 31, 31) >> (31 - 11)))
 					   << 1;
-		int32_t jImm = ExtractBitsFromUint(instruction, 12, 12 + 8) |
+		int32_t jImm = ExtractBitsFromUint(instruction, 12, 19, true) << 12 |
 					   (ExtractBitsFromUint(instruction, 20, 20, true) << 11) |
 					   (ExtractBitsFromUint(instruction, 21, 30, true) << 1) |
-					   (int32_t(ExtractBitsFromUint(instruction, 31, 31)) >> (31 - 20));
+					   (ExtractBitsFromUint(instruction, 31, 31, true) ? 0xfff00000 : 0x0);
 
 		Instruction inst;
 		inst.rd = rd;
