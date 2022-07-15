@@ -341,12 +341,18 @@ namespace RISC
 		int32_t iImm = int32_t(ExtractBitsFromUint(instruction, 20, 31)) >> 20;
 		int32_t sImm = rd | int32_t(ExtractBitsFromUint(instruction, 25, 31) >> 25);
 		int32_t uImm = int32_t(ExtractBitsFromUint(instruction, 12, 31)) >> 11;
-		int32_t bImm = (int32_t(((rd & 1) << 11 | (rd >> 1) | (funct7 << 5)) | ExtractBitsFromUint(instruction, 31, 31) >> 20)) << 1;
-		int32_t jImm = (int32_t(ExtractBitsFromUint(instruction, 12, 19, true) << 12 | // 12 to 19
-								ExtractBitsFromUint(instruction, 20, 20, true) << 11 | // 11
-								ExtractBitsFromUint(instruction, 21, 30, true) |	   // 1 to 10
-								int32_t(ExtractBitsFromUint(instruction, 31, 31)) >> 11))
-					   << 1; // 20
+		// (((m_InstructionWord >> 7) & 0x1) << 11) |
+		// (((m_InstructionWord >> 8) & 0xF) << 1) |
+		// (((m_InstructionWord >> 25) & 0x3F) << 5) |
+		// 	((m_InstructionWord >> 31) ? 0xFFFFF000 : 0x0);
+
+		int32_t bImm = (int32_t(((rd & 1) << 11 | (rd >> 1) | (funct7 << 5)) |
+								ExtractBitsFromUint(instruction, 31, 31) >> (31 - 11)))
+					   << 1;
+		int32_t jImm = ExtractBitsFromUint(instruction, 12, 12 + 8) |
+					   (ExtractBitsFromUint(instruction, 20, 20, true) << 11) |
+					   (ExtractBitsFromUint(instruction, 21, 30, true) << 1) |
+					   (int32_t(ExtractBitsFromUint(instruction, 31, 31)) >> (31 - 20));
 
 		Instruction inst;
 		inst.rd = rd;
