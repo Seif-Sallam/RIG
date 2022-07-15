@@ -5,9 +5,9 @@
 #include <cstring>
 
 #define TYPE_NAME(funcName) #funcName
-#define TABLE_ENTRY(funcName)         \
-	{                                 \
-		TYPE_NAME(funcName), funcName \
+#define TABLE_ENTRY(funcName)              \
+	{                                      \
+		TYPE_NAME(funcName), funcName##_32 \
 	}
 
 namespace RISC
@@ -48,8 +48,8 @@ namespace RISC
 	inline static bool JALR_32(Instruction &self) { return true; }
 	inline static bool LUI_32(Instruction &self) { return true; }
 	inline static bool AUIPC_32(Instruction &self) { return true; }
-	inline static bool ECALL(Instruction &self) { return true; }
-	inline static bool EBREAK(Instruction &self) { return true; }
+	inline static bool ECALL_32(Instruction &self) { return true; }
+	inline static bool EBREAK_32(Instruction &self) { return true; }
 
 	const std::vector<const char *>
 		Instruction::typeNames = {
@@ -93,42 +93,42 @@ namespace RISC
 			"EBREAK"};
 
 	static const std::unordered_map<const char *, bool (*)(Instruction &)> operationsTable{
-		TABLE_ENTRY(ADD_32),
-		TABLE_ENTRY(SUB_32),
-		TABLE_ENTRY(XOR_32),
-		TABLE_ENTRY(OR_32),
-		TABLE_ENTRY(AND_32),
-		TABLE_ENTRY(SLL_32),
-		TABLE_ENTRY(SRL_32),
-		TABLE_ENTRY(SLT_32),
-		TABLE_ENTRY(SLTU_32),
-		TABLE_ENTRY(ADDI_32),
-		TABLE_ENTRY(XORI_32),
-		TABLE_ENTRY(ORI_32),
-		TABLE_ENTRY(ANDI_32),
-		TABLE_ENTRY(SLLI_32),
-		TABLE_ENTRY(SRLI_32),
-		TABLE_ENTRY(SRAI_32),
-		TABLE_ENTRY(SLTI_32),
-		TABLE_ENTRY(SLTIU_32),
-		TABLE_ENTRY(LB_32),
-		TABLE_ENTRY(LH_32),
-		TABLE_ENTRY(LW_32),
-		TABLE_ENTRY(LBU_32),
-		TABLE_ENTRY(LHU_32),
-		TABLE_ENTRY(SB_32),
-		TABLE_ENTRY(SH_32),
-		TABLE_ENTRY(SW_32),
-		TABLE_ENTRY(BEQ_32),
-		TABLE_ENTRY(BNE_32),
-		TABLE_ENTRY(BLT_32),
-		TABLE_ENTRY(BGE_32),
-		TABLE_ENTRY(BLTU_32),
-		TABLE_ENTRY(BGEU_32),
-		TABLE_ENTRY(JAL_32),
-		TABLE_ENTRY(JALR_32),
-		TABLE_ENTRY(LUI_32),
-		TABLE_ENTRY(AUIPC_32),
+		TABLE_ENTRY(ADD),
+		TABLE_ENTRY(SUB),
+		TABLE_ENTRY(XOR),
+		TABLE_ENTRY(OR),
+		TABLE_ENTRY(AND),
+		TABLE_ENTRY(SLL),
+		TABLE_ENTRY(SRL),
+		TABLE_ENTRY(SLT),
+		TABLE_ENTRY(SLTU),
+		TABLE_ENTRY(ADDI),
+		TABLE_ENTRY(XORI),
+		TABLE_ENTRY(ORI),
+		TABLE_ENTRY(ANDI),
+		TABLE_ENTRY(SLLI),
+		TABLE_ENTRY(SRLI),
+		TABLE_ENTRY(SRAI),
+		TABLE_ENTRY(SLTI),
+		TABLE_ENTRY(SLTIU),
+		TABLE_ENTRY(LB),
+		TABLE_ENTRY(LH),
+		TABLE_ENTRY(LW),
+		TABLE_ENTRY(LBU),
+		TABLE_ENTRY(LHU),
+		TABLE_ENTRY(SB),
+		TABLE_ENTRY(SH),
+		TABLE_ENTRY(SW),
+		TABLE_ENTRY(BEQ),
+		TABLE_ENTRY(BNE),
+		TABLE_ENTRY(BLT),
+		TABLE_ENTRY(BGE),
+		TABLE_ENTRY(BLTU),
+		TABLE_ENTRY(BGEU),
+		TABLE_ENTRY(JAL),
+		TABLE_ENTRY(JALR),
+		TABLE_ENTRY(LUI),
+		TABLE_ENTRY(AUIPC),
 		TABLE_ENTRY(ECALL),
 		TABLE_ENTRY(EBREAK),
 	};
@@ -136,15 +136,20 @@ namespace RISC
 	Instruction::Instruction(const std::string &type)
 		: rs1(0), rs2(0), rd(0), imm(0), instName(type)
 	{
+		Init(type);
+	}
+
+	void Instruction::Init(const std::string &type)
+	{
 		this->instName = type;
 		for (auto &c : this->instName)
 			c = toupper(c);
+
 		if (auto it = operationsTable.find(instName.c_str()); it != operationsTable.end())
-		{
 			m_Operation = it->second;
-		}
 		else
 			m_Operation = nullptr;
+		m_Initialized = true;
 
 		WriteType();
 	}
@@ -249,27 +254,27 @@ namespace RISC
 		switch (type)
 		{
 		case TYPE1:
-			n = sprintf(format, " x%u, %u", inst.rd, inst.imm);
+			n = sprintf(format, " x%u, %d", inst.rd, inst.imm);
 			break;
 		case TYPE2:
-			n = sprintf(format, " x%u, %u(x%u)", inst.rd, inst.imm, inst.rs1);
+			n = sprintf(format, " x%u, %d(x%u)", inst.rd, inst.imm, inst.rs1);
 			break;
 		case TYPE3:
-			n = sprintf(format, " x%u, %u(x%u)", inst.rs2, inst.imm, inst.rs1);
+			n = sprintf(format, " x%u, %d(x%u)", inst.rs2, inst.imm, inst.rs1);
 			break;
 		case TYPE4:
 			n = sprintf(format, " x%u, x%u, x%u", inst.rd, inst.rs1, inst.rs2);
 			break;
 		case TYPE5:
-			n = sprintf(format, " x%u, x%u, %u", inst.rd, inst.rs1, inst.imm);
+			n = sprintf(format, " x%u, x%u, %d", inst.rd, inst.rs1, inst.imm);
 			break;
 		case TYPE6:
 			break;
 		case TYPE7:
-			n = sprintf(format, " x%u, x%u, %u", inst.rs1, inst.rs2, inst.imm);
+			n = sprintf(format, " x%u, x%u, %d", inst.rs1, inst.rs2, inst.imm);
 			break;
 		default:
-			n = sprintf(format, " <Unspported Instruction>");
+			n = sprintf(format, "<Unspported Instruction>");
 			break;
 		}
 

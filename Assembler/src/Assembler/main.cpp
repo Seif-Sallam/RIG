@@ -14,8 +14,8 @@ int main(int argc, char const *argv[])
 	if (argc < 3 || (!isdigit(argv[1][0])))
 	{
 		std::cerr << "Invalid number of arguments\n\tUsage:\t./assembler <Output Option> <assembly_file> [... list of files to assemble]\n"
-					 "Output Options are either\n\t0: ASCII Biniary\n\t1: Binary\n\t2: Hexadecimal";
-		exit(1);
+					 "Output Options are either\n\t0: ASCII Biniary\n\t1: Binary\n\t2: Hexadecimal\n";
+		return 1;
 	}
 
 	uint32_t mode = argv[1][0] - '0';
@@ -60,6 +60,8 @@ int main(int argc, char const *argv[])
 		outputFile.open(title);
 		for (auto &inst : parseOutput.instructions)
 		{
+			auto instStr = RISC::Instruction::FormatInstruction(inst);
+			std::cout << "\t" << instStr << std::endl;
 			Assembled assembledInst;
 			assembledInst.asInt = translator.Assemble(inst);
 			if (mode == 0)

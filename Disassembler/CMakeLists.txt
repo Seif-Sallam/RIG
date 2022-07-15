@@ -1,29 +1,29 @@
 cmake_minimum_required(VERSION 3.16)
 
 set(SOURCES
-	./src/Assembler/main.cpp)
+	./src/Disassembler/main.cpp)
 
 add_executable(
-	Assembler
+	Disassembler
 	${SOURCES}
 	${HEADERS}
 )
 
 target_include_directories(
-	Assembler
+	Disassembler
 	PRIVATE
 	./include/
 	../Parser/include/
 	../RISC/include/
 )
 
-target_link_libraries(Assembler
+target_link_libraries(Disassembler
 	PRIVATE
 	RISC
 	Parser
 )
 
-target_compile_definitions(Assembler
+target_compile_definitions(Disassembler
 	PRIVATE
 	RESOURCES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/resources/"
 )

@@ -19,7 +19,9 @@ namespace RISC
 	class Instruction
 	{
 	public:
+		Instruction() = default;
 		Instruction(const std::string &instType);
+		void Init(const std::string &instType);
 		bool Operate();
 		static const std::vector<const char *> typeNames;
 
@@ -32,6 +34,7 @@ namespace RISC
 
 	private:
 		void WriteType();
+		bool m_Initialized = false;
 		bool (*m_Operation)(Instruction &);
 	};
 }

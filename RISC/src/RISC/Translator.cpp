@@ -1,4 +1,6 @@
 #include "RISC/Translator.h"
+#include "RISC/defines.h"
+
 #include <bitset>
 #include <iostream>
 #include <tuple>
@@ -30,10 +32,12 @@ namespace RISC
 		return stream;
 	}
 
-	inline static uint32_t ExtractBitsFromUint(const uint32_t &stream, uint32_t from, uint32_t to)
+	inline static uint32_t ExtractBitsFromUint(const uint32_t &stream, uint32_t from, uint32_t to, bool shiftByFrom = false)
 	{
 		uint32_t mask = (((0xffffffff << (32u - (to + 1))) >> (32 - (to + 1))) >> from) << from;
 		uint32_t output = stream & mask; // clearing the bits of the mask
+		if (shiftByFrom)
+			output >>= from;
 		return output;
 	}
 
@@ -249,8 +253,8 @@ namespace RISC
 	inline static void AssembleSType(Instruction &instruction, uint32_t &output)
 	{
 		Format sInstruction;
-		sInstruction.funct7 = instruction.imm >> 5;
-		sInstruction.rd = instruction.imm & 0x1f;
+		sInstruction.funct7 = ExtractBitsFromUint(instruction.imm, 5, 11, true);
+		sInstruction.rd = ExtractBitsFromUint(instruction.imm, 0, 4, true);
 		sInstruction.rs1 = instruction.rs1;
 		sInstruction.rs2 = instruction.rs2;
 		sInstruction.opcode = 0b0100011;
@@ -327,5 +331,193 @@ namespace RISC
 
 	Instruction Translator::Dissassemble(uint32_t instruction)
 	{
+		uint32_t opcode = ExtractBitsFromUint(instruction, 0, 6); // Universal Opcode
+		uint32_t rd = ExtractBitsFromUint(instruction, 7, 11, true);
+		uint32_t funct3 = ExtractBitsFromUint(instruction, 12, 14, true);
+		uint32_t rs1 = ExtractBitsFromUint(instruction, 15, 19, true);
+		uint32_t rs2 = ExtractBitsFromUint(instruction, 20, 24, true);
+		uint32_t funct7 = ExtractBitsFromUint(instruction, 25, 31, true);
+
+		int32_t iImm = int32_t(ExtractBitsFromUint(instruction, 20, 31)) >> 20;
+		int32_t sImm = rd | int32_t(ExtractBitsFromUint(instruction, 25, 31) >> 25);
+		int32_t uImm = int32_t(ExtractBitsFromUint(instruction, 12, 31)) >> 11;
+		int32_t bImm = (int32_t(((rd & 1) << 11 | (rd >> 1) | (funct7 << 5)) | ExtractBitsFromUint(instruction, 31, 31) >> 20)) << 1;
+		int32_t jImm = (int32_t(ExtractBitsFromUint(instruction, 12, 19, true) << 12 | // 12 to 19
+								ExtractBitsFromUint(instruction, 20, 20, true) << 11 | // 11
+								ExtractBitsFromUint(instruction, 21, 30, true) |	   // 1 to 10
+								int32_t(ExtractBitsFromUint(instruction, 31, 31)) >> 11))
+					   << 1; // 20
+
+		Instruction inst;
+		inst.rd = rd;
+		inst.rs1 = rs1;
+		inst.rs2 = rs2;
+		std::string name = "";
+
+		switch (opcode)
+		{
+		case OPCODE_JAL:
+		{
+			inst.imm = jImm;
+			name = "JAL";
+		}
+		break;
+		case OPCODE_JALR:
+		{
+			inst.imm = iImm;
+			name = "JALR";
+		}
+		break;
+		case OPCODE_Arith_R:
+		{
+			switch (funct3)
+			{
+			case F3_ADD:
+				name = (ExtractBitsFromUint(funct7, 5, 5)) ? "SUB" : "ADD";
+				break;
+			case F3_AND:
+				name = "AND";
+				break;
+			case F3_OR:
+				name = "OR";
+				break;
+			case F3_SLL:
+				name = "SLL";
+				break;
+			case F3_SLT:
+				name = "SLT";
+				break;
+			case F3_SLTU:
+				name = "SLTU";
+				break;
+			case F3_SRL:
+				name = (ExtractBitsFromUint(funct7, 5, 5)) ? "SRA" : "SRL";
+				break;
+			case F3_XOR:
+				name = "XOR";
+				break;
+			}
+		}
+		break;
+		case OPCODE_Arith_I:
+		{
+			inst.imm = iImm;
+			switch (funct3)
+			{
+			case F3_ADD:
+				name = "ADDI";
+				break;
+			case F3_AND:
+				name = "ANDI";
+				break;
+			case F3_OR:
+				name = "ORI";
+				break;
+			case F3_SLL:
+				name = "SLLI";
+				break;
+			case F3_SLT:
+				name = "SLTI";
+				break;
+			case F3_SLTU:
+				name = "SLTUI";
+				break;
+			case F3_SRL:
+				name = (ExtractBitsFromUint(funct7, 5, 5, true)) ? "SRAI" : "SRLI";
+				inst.imm = rs2;
+				break;
+			case F3_XOR:
+				name = "XORI";
+				break;
+			}
+		}
+		break;
+		case OPCODE_Branch:
+		{
+			inst.imm = bImm;
+			switch (funct3)
+			{
+			case BR_BEQ:
+				name = "BEQ";
+				break;
+			case BR_BGE:
+				name = "BGE";
+				break;
+			case BR_BGEU:
+				name = "BGEU";
+				break;
+			case BR_BLT:
+				name = "BLT";
+				break;
+			case BR_BLTU:
+				name = "BLTU";
+				break;
+			case BR_BNE:
+				name = "BNE";
+				break;
+			}
+		}
+		break;
+		case OPCODE_Load:
+		{
+			inst.imm = iImm;
+			switch (funct3)
+			{
+			case L_B:
+				name = "LB";
+				break;
+			case L_H:
+				name = "LH";
+				break;
+			case L_W:
+				name = "LW";
+				break;
+			case L_BU:
+				name = "LBU";
+				break;
+			case L_HU:
+				name = "LHU";
+				break;
+			}
+		}
+		break;
+		case OPCODE_Store:
+		{
+			inst.imm = sImm;
+			switch (funct3)
+			{
+			case S_W:
+				name = "SW";
+				break;
+			case S_H:
+				name = "SH";
+				break;
+			case S_B:
+				name = "SB";
+				break;
+			}
+		}
+		break;
+		case OPCODE_ENV:
+		{
+			name = (rs2) ? "EBREAK" : "ECALL";
+		}
+		break;
+		case OPCODE_LUI:
+		{
+			inst.imm = uImm;
+			name = "LUI";
+		}
+		break;
+		case OPCODE_AUIPC:
+		{
+			inst.imm = uImm;
+			name = "AUIPC";
+		}
+		break;
+		}
+
+		inst.Init(name);
+		return inst;
 	}
 }
