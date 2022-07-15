@@ -63,7 +63,6 @@ namespace RISC
 		STR(s5),
 		STR(s6),
 		STR(s7),
-		STR(s7),
 		STR(s8),
 		STR(s9),
 		STR(s10),
