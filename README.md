@@ -28,10 +28,14 @@ RISC32I
   - The macros and the other directives will be NEXT
 - Parsing the data section so far is correct, and we get the data in a contianer that is easily traversed
 - Dumping the instructions in binary / hexadecimal / ascii binary.
+- Disassembling the binary format to readable assembly instructions. (NO DATA SECTION, NOT NECC. WORKING CODE, JUST INSTRUCTIONS DISASSEMBLED)
 
 # Next STEPS:
 
-- Disassembling the binary format to readable assembly instructions. (NO DATA SECTION, NOT NECC. WORKING CODE, JUST INSTRUCTIONS DISASSEMBLED)
+- Loggers
+- Adding the text editor
+- Constructing the IDE
+- Pesudo instructions
 - Pre-processing stage:
   - Parsing labels and putting them with the right address (both instructions and data).
   - Parsing Macros.
@@ -44,4 +48,3 @@ RISC32I
   - Start with the graphics.
 
 ## Problems:
-  Constructing the J Imm in Assembling stage

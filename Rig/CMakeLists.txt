@@ -15,12 +15,14 @@ target_include_directories(
 	./include/
 	../Parser/include/
 	../RISC/include/
+	../IDE/include/
 )
 
 target_link_libraries(RIG
 	PRIVATE
 	RISC
 	Parser
+	IDE
 )
 
 target_compile_definitions(RIG
