@@ -10,10 +10,31 @@ include(CPM)
 
 set(EXTERNAL_INSTALL_LOCATION ${CMAKE_BINARY_DIR}/external)
 
+# GLAD
 CPMAddPackage(
-	NAME SFML
-	GIT_REPOSITORY git@github.com:Seif-Sallam/SFML.git
-	GIT_TAG 2.5.x
+	NAME glad
+	GITHUB_REPOSITORY Dav1dde/glad
+	VERSION 0.1.33
+)
+
+# GLM
+CPMAddPackage(
+	NAME glm
+	GITHUB_REPOSITORY g-truc/glm
+	GIT_TAG 0.9.9.7
+)
+
+# GLFW
+CPMAddPackage(
+	NAME glfw
+	GITHUB_REPOSITORY glfw/glfw
+	GIT_TAG 3.3.2
+	OPTIONS
+	"GLFW_BUILD_TESTS Off"
+	"GLFW_BUILD_EXAMPLES Off"
+	"GLFW_BUILD_DOCS Off"
+	"GLFW_INSTALL Off"
+	"GLFW_USE_HYBRID_HPG On"
 )
 
 project(

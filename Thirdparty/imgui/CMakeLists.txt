@@ -4,16 +4,16 @@ FILE(GLOB SOURCES ./*.cpp)
 FILE(GLOB HEADERS ./*.h)
 
 add_library(
-    imguiSFML
+    imgui
     STATIC
     ${SOURCES}
     ${HEADERS}
 )
 
-target_link_libraries(imguiSFML
+target_link_libraries(imgui
     PRIVATE
     GL
-    sfml-graphics
-    sfml-window
-    sfml-system
+    glfw
+    glad
+    glm
 )

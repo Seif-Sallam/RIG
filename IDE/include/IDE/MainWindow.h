@@ -1,11 +1,13 @@
 #pragma once
 
-#include <SFML/Graphics.hpp>
+#include <glad/glad.h>
+#include <GL/gl.h>
+#include <GLFW/glfw3.h>
+#include <glm/glm.hpp>
 
 #include <iostream>
 #include <string>
 #include <imgui.h>
-#include <imgui-SFML.h>
 #include <imguial_term.h>
 #include <TextEditor.h>
 
@@ -16,17 +18,19 @@ namespace IDE
 	public:
 		MainWindow(uint32_t argc, const char *argv[]);
 		void Run();
+		~MainWindow();
 
 	private:
 		void HandleEvents();
 		void ImGuiLayer();
-		void Update(const sf::Time &deltaTime);
+		void Update();
 		void Render();
 
+		void InitilizeWindow();
+
 	private:
-		sf::RenderWindow m_Window;
-		sf::Clock m_Clk;
-		ImGuiAl::BufferedLog<1024> logger;
+		GLFWwindow *m_Window;
 		TextEditor m_TextEditor;
 	};
+
 }

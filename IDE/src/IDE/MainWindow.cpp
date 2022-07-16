@@ -1,19 +1,38 @@
-#include "IDE/MainWindow.h"
-
-#include <imgui-SFML.h>
 #include <imgui.h>
+#include <imgui_impl_glfw.h>
+#include <imgui_impl_opengl3.h>
+
+#include "IDE/MainWindow.h"
 
 #include <imguial_term.h>
 #include <imguial_button.h>
 
 #include <fstream>
 
+#include <stdio.h>
+
 namespace IDE
 {
-	MainWindow::MainWindow(uint32_t argc, const char *argv[])
-		: m_Window(sf::RenderWindow(sf::VideoMode(1366, 768), "RIG v0.0.2", sf::Style::Default))
+	static void ErrorCallbackFunc(int error, const char *description)
 	{
-		ImGui::SFML::Init(m_Window);
+		fputs(description, stderr);
+	}
+
+	static void KeyCallbackFunc(GLFWwindow *window, int key, int scancode, int action, int mods)
+	{
+		// close window when ESC has been pressed
+		// if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
+		// glfwSetWindowShouldClose(window, GL_TRUE);
+	}
+
+	static void ViewPortResizeCallback(GLFWwindow *window, int width, int height)
+	{
+		glViewport(0, 0, width, height);
+	}
+
+	MainWindow::MainWindow(uint32_t argc, const char *argv[])
+	{
+		InitilizeWindow();
 		auto lang = TextEditor::LanguageDefinition::CPlusPlus();
 
 		m_TextEditor.SetLanguageDefinition(lang);
@@ -36,15 +55,78 @@ namespace IDE
 		m_TextEditor.SetText(str);
 	}
 
+	void MainWindow::InitilizeWindow()
+	{
+		if (!glfwInit())
+			exit(-1);
+
+		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
+		glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+		glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+
+		const int width = 1366;
+		const int height = 768;
+
+		m_Window = glfwCreateWindow(width, height, "RIG v0.0.2", NULL, NULL);
+
+		if (!m_Window)
+		{
+			fprintf(stderr, "Failed to open GLFW window.\n");
+			glfwTerminate();
+			exit(-1);
+		}
+
+		glfwMakeContextCurrent(m_Window);
+
+		if (!gladLoadGL())
+		{
+			fprintf(stderr, "Couldn't load glad\n");
+			glfwTerminate();
+			exit(-1);
+		}
+		const GLubyte *renderer = glGetString(GL_RENDERER);
+		const GLubyte *version = glGetString(GL_VERSION);
+		fprintf(stdout, "Renderer: %s\n", renderer);
+		fprintf(stdout, "OpenGL version supported %s\n", version);
+
+		glfwSetKeyCallback(m_Window, KeyCallbackFunc);
+
+		glClearColor(0.0, 0.0, 0.0, 1.0);
+
+		glfwSetFramebufferSizeCallback(m_Window, ViewPortResizeCallback);
+		glfwSwapInterval(1); // Enable vsync
+
+		// Setup Dear ImGui context
+		IMGUI_CHECKVERSION();
+		ImGui::CreateContext();
+
+		ImGui::StyleColorsDark();
+
+		ImGui_ImplGlfw_InitForOpenGL(m_Window, true);
+		ImGui_ImplOpenGL3_Init("#version 130");
+	}
+
+	MainWindow::~MainWindow()
+	{
+		ImGui_ImplOpenGL3_Shutdown();
+		ImGui_ImplGlfw_Shutdown();
+		ImGui::DestroyContext();
+
+		glfwDestroyWindow(m_Window);
+		glfwTerminate();
+	}
+
 	void MainWindow::Run()
 	{
-		while (m_Window.isOpen())
+		while (!glfwWindowShouldClose(m_Window))
 		{
-			sf::Time deltaTime = m_Clk.restart();
 			HandleEvents();
 
-			Update(deltaTime);
-
+			Update();
+			ImGui_ImplOpenGL3_NewFrame();
+			ImGui_ImplGlfw_NewFrame();
+			ImGui::NewFrame();
 			ImGuiLayer();
 
 			Render();
@@ -53,27 +135,7 @@ namespace IDE
 
 	void MainWindow::HandleEvents()
 	{
-		sf::Event event;
-		while (m_Window.pollEvent(event))
-		{
-			ImGui::SFML::ProcessEvent(event);
-			switch (event.type)
-			{
-			case sf::Event::Closed:
-				m_Window.close();
-				break;
-			case sf::Event::Resized:
-			{
-				sf::View view;
-				view.setSize(m_Window.getSize().x, m_Window.getSize().y);
-				view.setCenter(view.getSize() / 2.0f);
-				m_Window.setView(view);
-			}
-			break;
-			default:
-				break;
-			}
-		}
+		glfwPollEvents();
 	}
 
 	void MainWindow::ImGuiLayer()
@@ -84,7 +146,6 @@ namespace IDE
 
 			if (ImGui::Button("Log"))
 			{
-				logger.info("SOME INFO");
 			}
 		}
 		ImGui::End();
@@ -103,7 +164,8 @@ namespace IDE
 						/// save text....
 					}
 					if (ImGui::MenuItem("Quit", "Alt-F4"))
-						m_Window.close();
+					{
+					}
 					ImGui::EndMenu();
 				}
 				if (ImGui::BeginMenu("Edit"))
@@ -160,17 +222,17 @@ namespace IDE
 		ImGui::End();
 	}
 
-	void MainWindow::Update(const sf::Time &deltaTime)
+	void MainWindow::Update()
 	{
-		ImGui::SFML::Update(m_Window, deltaTime);
 	}
 
 	void MainWindow::Render()
 	{
-		m_Window.clear();
+		glClearColor(0.3f, 0.3f, 0.3f, 0.0f);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		ImGui::Render();
+		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
-		ImGui::SFML::Render(m_Window);
-		// this->logger.draw(ImVec2(500, 200));
-		m_Window.display();
+		glfwSwapBuffers(m_Window);
 	}
 }

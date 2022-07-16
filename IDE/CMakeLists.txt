@@ -16,8 +16,8 @@ target_include_directories(IDE
 target_link_libraries(IDE
 	PUBLIC
 	GL
-	imguiSFML
-	sfml-graphics
-	sfml-window
-	sfml-system
+	glad
+	glfw
+	glm
+	imgui
 )
