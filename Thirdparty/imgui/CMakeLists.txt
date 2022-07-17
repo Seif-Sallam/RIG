@@ -4,16 +4,22 @@ FILE(GLOB SOURCES ./*.cpp)
 FILE(GLOB HEADERS ./*.h)
 
 add_library(
-    imgui
-    STATIC
-    ${SOURCES}
-    ${HEADERS}
+	imgui
+	STATIC
+	${SOURCES}
+	${HEADERS}
 )
 
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+	target_link_directories(imgui
+		PUBLIC
+		GL
+	)
+endif()
+
 target_link_libraries(imgui
-    PRIVATE
-    GL
-    glfw
-    glad
-    glm
+	PRIVATE
+	glfw
+	glad
+	glm
 )
