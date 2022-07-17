@@ -16,6 +16,7 @@ target_include_directories(
 	../Parser/include/
 	../RISC/include/
 	../IDE/include/
+	../Utils/include
 )
 
 target_link_libraries(RIG
@@ -23,6 +24,7 @@ target_link_libraries(RIG
 	RISC
 	Parser
 	IDE
+	Utils
 )
 
 target_compile_definitions(RIG

@@ -10,8 +10,8 @@ add_library(Utils
 )
 
 target_link_libraries(Utils
-	PRIVATE
-	RISC
+	PUBLIC
+	fmt
 )
 
 target_include_directories(Utils

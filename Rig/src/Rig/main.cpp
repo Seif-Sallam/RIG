@@ -11,11 +11,19 @@
 #include "RISC/Instruction.h"
 
 #include "IDE/MainWindow.h"
+
+#include "Utils/Color.h"
+#include "Utils/Logger.h"
+
 int main(int argc, const char *argv[])
 {
+	Utils::Logger::Debug("Hello, World! {}", "Debug");
+	Utils::Logger::Info("Hello, World! {}", "Info");
+	Utils::Logger::Warning("Hello, World! {}", "Warning");
+	Utils::Logger::Error("Hello, World! {}", "Error");
+	Utils::Logger::Success("Hello, World! {}", "Success");
 	if (false)
 	{
-
 		const std::string filePath = std::string(RESOURCES_DIR) + std::string("/testfile.txt");
 		Parser::Parser parser;
 		if (parser.ReadFile(filePath))
