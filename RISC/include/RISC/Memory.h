@@ -3,7 +3,9 @@
 #include <algorithm>
 #include <vector>
 #include <array>
-#define MEMORY_SIZE 1024L * 1024L * 1024L * 4L // 4 GB
+
+// 4 GB
+#define MEMORY_SIZE (size_t)0x100000000
 
 namespace RISC
 {
@@ -33,6 +35,6 @@ namespace RISC
 		const uint32_t m_DataStartAddr = 0x10010000;
 		const uint32_t m_HeapStartAddr = 0x10040000;
 		const uint32_t m_GpStartAddr = 0x10008000;
-		uint8_t m_Blocks[MEMORY_SIZE];
+		std::vector<uint8_t> m_Blocks;
 	};
 }

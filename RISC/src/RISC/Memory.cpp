@@ -28,7 +28,7 @@ namespace RISC
 				   (memBlocks[address + 2] << 8) | (memBlocks[address + 3]);
 		}
 		else
-			return -1;
+			return UINT_MAX;
 	}
 
 	const uint16_t Memory::GetHalfWord(uint32_t address, bool isData)
@@ -39,7 +39,7 @@ namespace RISC
 			return (memBlocks[address] << 8) | (memBlocks[address + 1]);
 		}
 		else
-			return -1;
+			return UINT16_MAX;
 	}
 
 	const uint8_t Memory::GetByte(uint32_t address, bool isData)
@@ -50,7 +50,7 @@ namespace RISC
 			return memBlocks[address];
 		}
 		else
-			return -1;
+			return UINT8_MAX;
 	}
 
 	const uint32_t Memory::GetHalfWordE(uint32_t address, bool isData)
@@ -65,7 +65,7 @@ namespace RISC
 			return value;
 		}
 		else
-			return -1;
+			return UINT_MAX;
 	}
 
 	const uint32_t Memory::GetByteE(uint32_t address, bool isData)
@@ -80,7 +80,7 @@ namespace RISC
 			return value;
 		}
 		else
-			return -1;
+			return UINT_MAX;
 	}
 
 	const bool Memory::SaveByte(uint32_t address, uint8_t byte, bool isData)
@@ -116,10 +116,10 @@ namespace RISC
 
 		if (Get().CheckValidity(address, isData))
 		{
-			memBlocks[address] = word & 0xff;
-			memBlocks[address + 1] = (word & 0xff00) >> 8;
-			memBlocks[address + 2] = (word & 0xff0000) >> 16;
-			memBlocks[address + 3] = (word & 0xff000000) >> 24;
+			memBlocks[address] = uint8_t(word & 0xff);
+			memBlocks[address + 1] = uint8_t((word & 0xff00) >> 8);
+			memBlocks[address + 2] = uint8_t((word & 0xff0000) >> 16);
+			memBlocks[address + 3] = uint8_t((word & 0xff000000) >> 24);
 			return true;
 		}
 		else
@@ -128,14 +128,14 @@ namespace RISC
 
 	Memory &Memory::Get()
 	{
-		static Memory mem;
+		static Memory mem{};
 		return mem;
 	}
 
 	Memory::Memory()
 	{
 		// Initializing the entire meomry with zeros
-		memset(this->m_Blocks, 0, MEMORY_SIZE);
+		m_Blocks.resize(MEMORY_SIZE, 0);
 	}
 
 	bool Memory::CheckValidity(uint32_t address, bool isData)
