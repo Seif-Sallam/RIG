@@ -1,4 +1,5 @@
 #include <RISC/Memory.h>
+#include <limits>
 
 #include <cstring>
 
@@ -28,7 +29,7 @@ namespace RISC
 				   (memBlocks[address + 2] << 8) | (memBlocks[address + 3]);
 		}
 		else
-			return UINT_MAX;
+			return UINT32_MAX;
 	}
 
 	const uint16_t Memory::GetHalfWord(uint32_t address, bool isData)
@@ -65,7 +66,7 @@ namespace RISC
 			return value;
 		}
 		else
-			return UINT_MAX;
+			return UINT32_MAX;
 	}
 
 	const uint32_t Memory::GetByteE(uint32_t address, bool isData)
@@ -80,7 +81,7 @@ namespace RISC
 			return value;
 		}
 		else
-			return UINT_MAX;
+			return UINT32_MAX;
 	}
 
 	const bool Memory::SaveByte(uint32_t address, uint8_t byte, bool isData)
