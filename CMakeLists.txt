@@ -53,6 +53,7 @@ endif()
 
 add_subdirectory(Thirdparty/imgui)
 include_directories(AFTER Thirdparty/imgui)
+add_subdirectory(Utils)
 add_subdirectory(IDE)
 add_subdirectory(RISC)
 add_subdirectory(Parser)
