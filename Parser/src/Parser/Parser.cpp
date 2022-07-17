@@ -84,7 +84,7 @@ namespace Parser
 					value = c - 'a' + 10;
 			}
 
-			sum += value * pow(base, pos);
+			sum += value * (uint32_t)pow(base, pos);
 			pos++;
 		}
 
@@ -103,7 +103,7 @@ namespace Parser
 		std::ifstream inputFile(filePath.data(), std::ios::binary);
 		if (inputFile.is_open())
 		{
-			uint32_t size = inputFile.tellg();
+			size_t size = inputFile.tellg();
 			m_FileContent = std::string(std::istreambuf_iterator<char>(inputFile), std::istreambuf_iterator<char>());
 			inputFile.close();
 
@@ -134,12 +134,12 @@ namespace Parser
 
 	inline static void AddNewLineAfter(std::string &str, const char *pattern)
 	{
-		int32_t findIndex = str.find(pattern);
+		size_t findIndex = str.find(pattern);
 		if (findIndex != std::string::npos)
 		{
 			if (findIndex - str.size() < 10)
 			{
-				uint32_t index = findIndex + strlen(pattern);
+				size_t index = findIndex + strlen(pattern);
 				if (str[index] != '\n')
 					str.insert(str.begin() + index, '\n');
 			}
@@ -247,7 +247,7 @@ namespace Parser
 				}
 
 				inComment = false;
-				if (fonudNewLine && newLineCount >= (2 + !removeComments))
+				if (fonudNewLine && newLineCount >= (2u + !removeComments))
 					c = char(27);
 				else
 					fonudNewLine = true;
@@ -319,7 +319,7 @@ namespace Parser
 			std::getline(ss, directive);
 			std::string data;
 			{
-				uint32_t spaceIndex = directive.find(" ");
+				size_t spaceIndex = directive.find(" ");
 				data = directive.substr(spaceIndex + 1);
 				directive = directive.substr(0, spaceIndex);
 			}
@@ -367,8 +367,8 @@ namespace Parser
 										  { return c == char(27); }),
 						   data.end());
 
-				int32_t spaceIndex = data.find(" ");
-				uint32_t lastIndex = 0;
+				size_t spaceIndex = data.find(" ");
+				size_t lastIndex = 0;
 				while (spaceIndex != std::string::npos)
 				{
 					std::string num = data.substr(lastIndex, spaceIndex - lastIndex);
@@ -392,8 +392,8 @@ namespace Parser
 				data.erase(std::remove_if(data.begin(), data.end(), [](const char &c)
 										  { return c == char(27); }),
 						   data.end());
-				int32_t spaceIndex = data.find(" ");
-				uint32_t lastIndex = 0;
+				size_t spaceIndex = data.find(" ");
+				size_t lastIndex = 0;
 				while (spaceIndex != std::string::npos)
 				{
 					std::string num = data.substr(lastIndex, spaceIndex - lastIndex);
@@ -454,7 +454,7 @@ namespace Parser
 			std::string line;
 			std::getline(ss, line);
 
-			int32_t index = line.find(":");
+			size_t index = line.find(":");
 
 			if (index != std::string::npos)
 			{
@@ -466,12 +466,12 @@ namespace Parser
 	template <class T>
 	inline T *getArrayFromDataItem(const std::string &data, uint32_t &size, uint32_t floatingPoint = 0)
 	{
-		size = std::count(data.begin(), data.end(), ' ') + 1;
+		size = (uint32_t)std::count(data.begin(), data.end(), ' ') + 1;
 
 		T *arr = new T[size];
 
-		int32_t lastIndex = 0;
-		int32_t space = data.find(' ');
+		size_t lastIndex = 0;
+		size_t space = data.find(' ');
 		for (uint32_t i = 0; i < size; i++)
 		{
 			std::string number = data.substr(lastIndex, space - lastIndex);
@@ -485,7 +485,7 @@ namespace Parser
 			}
 			else
 			{
-				arr[i] = GetInteger(number.c_str(), number.size());
+				arr[i] = GetInteger(number.c_str(), (uint32_t)number.size());
 			}
 
 			lastIndex = space + 1;
@@ -539,7 +539,7 @@ namespace Parser
 				}
 				else if (c2 == 'r')
 				{
-					c1 == '\r';
+					c1 = '\r';
 					c2 = char(27);
 					i++;
 				}
@@ -587,7 +587,7 @@ namespace Parser
 			{
 				data.pop_back();
 				data.erase(data.begin());
-				size = data.size();
+				size = (uint32_t)data.size();
 				void *finalData = (void *)getStringFromDataItem(data, false);
 				output.dataSection.AddItem(label, RISC::DataItem::STRING, size, finalData);
 				multiplier = 1;
@@ -596,7 +596,7 @@ namespace Parser
 			{
 				data.pop_back();
 				data.erase(data.begin());
-				size = data.size() + 1;
+				size = (uint32_t)data.size() + 1;
 				void *finalData = (void *)getStringFromDataItem(data, true);
 				output.dataSection.AddItem(label, RISC::DataItem::C_STRING, size, finalData);
 				multiplier = 1;
@@ -661,7 +661,7 @@ namespace Parser
 				c = toupper(c);
 
 			lineNumber++;
-			uint32_t index = line.find(" ");
+			size_t index = line.find(" ");
 			bool err = false;
 			std::string name = line.substr(0, index);
 			auto it = std::find(instTypes.begin(), instTypes.end(), name);
@@ -849,24 +849,22 @@ namespace Parser
 	Parser::FileText Parser::GenerateTextAndData(const std::string &fileContent)
 	{
 		Parser::FileText output;
-		int32_t startOfDataSection = fileContent.find(".data");
+		size_t startOfDataSection = fileContent.find(".data");
 		{
-			int32_t endOfDataIndex = fileContent.find(".data", startOfDataSection + 5);
+			size_t endOfDataIndex = fileContent.find(".data", startOfDataSection + 5);
 			// The bold assumption that the data section exists only ONCE
 			if (endOfDataIndex != std::string::npos)
 			{
-				printf("startOfDataSection: %u, end: %u\n", startOfDataSection, endOfDataIndex);
 				output.err = {ErrorMessage::INVALID_STRUCTURE_DATA, "There is more than one data section. (There should be only one data section)"};
 				return output;
 			}
 		}
-		int32_t startOfTextSection = fileContent.find(".text");
+		size_t startOfTextSection = fileContent.find(".text");
 		{
-			int32_t endOfTextSection = fileContent.find(".text", startOfTextSection + 5);
+			size_t endOfTextSection = fileContent.find(".text", startOfTextSection + 5);
 			// We will always have a text section
 			if (startOfTextSection == std::string::npos || endOfTextSection != std::string::npos)
 			{
-				printf("startOfTextSection: %d, end: %d\n", startOfTextSection, endOfTextSection);
 				output.err = {ErrorMessage::INVALID_STRUCTURE_TEXT, "There is more than one text section. (There should be only one textx section"};
 				return output;
 			}
@@ -878,13 +876,13 @@ namespace Parser
 			auto &dataSection = output.dataSection;
 			if (startOfDataSection < startOfTextSection)
 			{
-				uint32_t count = startOfTextSection - 6;
-				uint32_t start = startOfDataSection + 6;
+				size_t count = startOfTextSection - 6;
+				size_t start = startOfDataSection + 6;
 				dataSection = fileContent.substr(start, count);
 			}
 			else
 			{
-				uint32_t start = startOfDataSection + 6;
+				size_t start = startOfDataSection + 6;
 				dataSection = fileContent.substr(start);
 			}
 		}
@@ -893,13 +891,13 @@ namespace Parser
 			auto &textSection = output.textSection;
 			if (startOfTextSection < startOfDataSection)
 			{
-				uint32_t count = startOfDataSection - 6;
-				uint32_t start = startOfTextSection + 6;
+				size_t count = startOfDataSection - 6;
+				size_t start = startOfTextSection + 6;
 				textSection = fileContent.substr(start, count);
 			}
 			else
 			{
-				uint32_t start = startOfTextSection + 6;
+				size_t start = startOfTextSection + 6;
 				textSection = fileContent.substr(start);
 			}
 		}

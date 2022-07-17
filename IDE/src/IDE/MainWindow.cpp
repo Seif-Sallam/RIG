@@ -54,7 +54,7 @@ namespace IDE
 
 		ImGui::DockBuilderRemoveNode(m_DockID);							   // Clear out existing layout
 		ImGui::DockBuilderAddNode(m_DockID, ImGuiDockNodeFlags_DockSpace); // Add empty node
-		ImGui::DockBuilderSetNodeSize(m_DockID, ImVec2(m_Width, m_Height));
+		ImGui::DockBuilderSetNodeSize(m_DockID, ImVec2((float)m_Width, (float)m_Height));
 		m_DockIDLeft = ImGui::DockBuilderSplitNode(m_DockID, ImGuiDir_Left, 0.20f, NULL, &m_DockID);
 		m_DockIDRight = ImGui::DockBuilderSplitNode(m_DockID, ImGuiDir_Right, 0.20f, NULL, &m_DockID);
 		m_DockIDBottom = ImGui::DockBuilderSplitNode(m_DockID, ImGuiDir_Down, 0.20f, NULL, &m_DockID);
@@ -74,7 +74,7 @@ namespace IDE
 		{
 			ImGuiWindowFlags dockSpaceWindowFlags = ImGuiWindowFlags_None | ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoMove |
 													ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_AlwaysAutoResize;
-			ImGui::SetNextWindowSize(ImVec2(m_Width, m_Height));
+			ImGui::SetNextWindowSize(ImVec2((float)m_Width, (float)m_Height));
 			ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
 			ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
 			ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
@@ -82,7 +82,7 @@ namespace IDE
 			ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f));
 			ImGui::Begin(dockSpaceTitle, (bool *)nullptr, dockSpaceWindowFlags);
 			auto menuSize = DockspaceMenuBar();
-			ImVec2 windowSize(m_Width, m_Height);
+			ImVec2 windowSize((float)m_Width, (float)m_Height);
 			auto size = ImVec2();
 			size.y = windowSize.y - menuSize.y - 2.0f;
 			ImGui::DockSpace(dockSpaceID, size, ImGuiDockNodeFlags_NoWindowMenuButton);
@@ -206,12 +206,12 @@ namespace IDE
 		IMGUI_CHECKVERSION();
 		ImGui::CreateContext();
 
+		ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+
 		ImGui::StyleColorsDark();
 
 		ImGui_ImplGlfw_InitForOpenGL(m_Window, true);
 		ImGui_ImplOpenGL3_Init("#version 130");
-
-		ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 	}
 
 	MainWindow::~MainWindow()
