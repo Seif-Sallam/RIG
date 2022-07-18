@@ -25,7 +25,14 @@ bool equals(InputIt1 first1, InputIt1 last1,
 }
 
 TextEditor::TextEditor()
-	: mLineSpacing(1.0f), mUndoIndex(0), mTabSize(4), mOverwrite(false), mReadOnly(false), mWithinRender(false), mScrollToCursor(false), mScrollToTop(false), mTextChanged(false), mColorizerEnabled(true), mTextStart(20.0f), mLeftMargin(10), mCursorPositionChanged(false), mColorRangeMin(0), mColorRangeMax(0), mSelectionMode(SelectionMode::Normal), mCheckComments(true), mLastClick(-1.0f), mHandleKeyboardInputs(true), mHandleMouseInputs(true), mIgnoreImGuiChild(false), mShowWhitespaces(true), mStartTime(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count())
+	: mLineSpacing(1.0f), mUndoIndex(0), mTabSize(4),
+	  mOverwrite(false), mReadOnly(false), mWithinRender(false),
+	  mScrollToCursor(false), mScrollToTop(false), mTextChanged(false),
+	  mColorizerEnabled(true), mTextStart(20.0f), mLeftMargin(10), mCursorPositionChanged(false),
+	  mColorRangeMin(0), mColorRangeMax(0), mSelectionMode(SelectionMode::Normal), mCheckComments(true),
+	  mLastClick(-1.0f), mHandleKeyboardInputs(true), mHandleMouseInputs(true), mIgnoreImGuiChild(false),
+	  mShowWhitespaces(true),
+	  mStartTime(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count())
 {
 	SetPalette(GetDarkPalette());
 	SetLanguageDefinition(LanguageDefinition::HLSL());
@@ -121,7 +128,7 @@ TextEditor::Coordinates TextEditor::SanitizeCoordinates(const Coordinates &aValu
 
 // https://en.wikipedia.org/wiki/UTF-8
 // We assume that the char is a standalone character (<128) or a leading byte of an UTF-8 code sequence (non-10xxxxxx code)
-static int UTF8CharLength(TextEditor::Char c)
+static int UTF8CharLength(uint8_t c)
 {
 	if ((c & 0xFE) == 0xFC)
 		return 6;
@@ -569,7 +576,7 @@ void TextEditor::RemoveLine(int aStart, int aEnd)
 	}
 	mErrorMarkers = std::move(etmp);
 
-	Breakpoints btmp;
+	BreakpointsLines btmp;
 	for (auto i : mBreakpoints)
 	{
 		if (i >= aStart && i <= aEnd)
@@ -599,7 +606,7 @@ void TextEditor::RemoveLine(int aIndex)
 	}
 	mErrorMarkers = std::move(etmp);
 
-	Breakpoints btmp;
+	BreakpointsLines btmp;
 	for (auto i : mBreakpoints)
 	{
 		if (i == aIndex)
@@ -625,7 +632,7 @@ TextEditor::Line &TextEditor::InsertLine(int aIndex)
 		etmp.insert(ErrorMarkers::value_type(i.first >= aIndex ? i.first + 1 : i.first, i.second));
 	mErrorMarkers = std::move(etmp);
 
-	Breakpoints btmp;
+	BreakpointsLines btmp;
 	for (auto i : mBreakpoints)
 		btmp.insert(i >= aIndex ? i + 1 : i);
 	mBreakpoints = std::move(btmp);
