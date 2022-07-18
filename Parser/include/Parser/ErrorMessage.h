@@ -10,7 +10,7 @@ namespace Parser
 	{
 		enum Type : uint32_t
 		{
-			NO_ERROR,
+			NO_ERROR = 1,
 			INVALID_LABEL,
 			INVALID_SYMBOL,
 			INVALID_INSTRUCTION,

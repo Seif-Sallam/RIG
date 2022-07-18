@@ -29,10 +29,10 @@ RISC32I
 - Parsing the data section so far is correct, and we get the data in a contianer that is easily traversed
 - Dumping the instructions in binary / hexadecimal / ascii binary.
 - Disassembling the binary format to readable assembly instructions. (NO DATA SECTION, NOT NECC. WORKING CODE, JUST INSTRUCTIONS DISASSEMBLED)
+- Loggers
 
 # Next STEPS:
 
-- Loggers
 - Adding the text editor
 - Constructing the IDE
 - Pesudo instructions

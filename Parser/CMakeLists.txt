@@ -12,10 +12,12 @@ add_library(Parser
 target_link_libraries(Parser
 	PRIVATE
 	RISC
+	Utils
 )
 
 target_include_directories(Parser
 	PRIVATE
-	./../RISC/include/
 	./include/
+	./../RISC/include/
+	./../Utils/include/
 )

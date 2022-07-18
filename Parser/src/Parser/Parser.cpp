@@ -6,10 +6,15 @@
 #include <regex>
 
 #include <Parser/Parser.h>
+#include <Parser/ErrorMessage.h>
 
 #include <RISC/RegisterFile.h>
 #include <RISC/Instruction.h>
 #include <RISC/DataSectionContainer.h>
+
+#include <Utils/Logger.h>
+
+typedef Util::Logger Log;
 
 namespace Parser
 {
@@ -124,7 +129,7 @@ namespace Parser
 
 	void Parser::PrintFileContent() const
 	{
-		std::cout << m_FileContent << std::endl;
+		fmt::print("{}", m_FileContent);
 	}
 
 	Parser::~Parser()
@@ -436,7 +441,7 @@ namespace Parser
 			*/
 		}
 		dataSection = finalDataSection;
-		return ErrorMessage{ErrorMessage::NO_ERROR, "NO ERR"};
+		return ErrorMessage{};
 	}
 
 	void Parser::FormatFile()
@@ -485,7 +490,7 @@ namespace Parser
 			}
 			else
 			{
-				arr[i] = GetInteger(number.c_str(), (uint32_t)number.size());
+				arr[i] = (uint32_t)GetInteger(number.c_str(), (uint32_t)number.size());
 			}
 
 			lastIndex = space + 1;

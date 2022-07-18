@@ -15,12 +15,14 @@ target_include_directories(
 	./include/
 	../Parser/include/
 	../RISC/include/
+	../Utils/include
 )
 
 target_link_libraries(Disassembler
 	PRIVATE
 	RISC
 	Parser
+	Utils
 )
 
 target_compile_definitions(Disassembler

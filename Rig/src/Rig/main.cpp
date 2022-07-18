@@ -15,13 +15,14 @@
 #include "Utils/Color.h"
 #include "Utils/Logger.h"
 
+typedef Util::Logger Log;
 int main(int argc, const char *argv[])
 {
-	Util::Logger::Debug("Hello, World! {}", "Debug");
-	Util::Logger::Info("Hello, World! {}", "Info");
-	Util::Logger::Warning("Hello, World! {}", "Warning");
-	Util::Logger::Error("Hello, World! {}", "Error");
-	Util::Logger::Success("Hello, World! {}", "Success");
+	Log::Debug("Hello, World! {}", "Debug");
+	Log::Info("Hello, World! {}", "Info");
+	Log::Warning("Hello, World! {}", "Warning");
+	Log::Error("Hello, World! {}", "Error");
+	Log::Success("Hello, World! {}", "Success");
 	if (false)
 	{
 		const std::string filePath = std::string(RESOURCES_DIR) + std::string("/testfile.txt");
@@ -31,23 +32,22 @@ int main(int argc, const char *argv[])
 			auto parsedData = parser.Parse();
 			if (parsedData.err)
 			{
-				std::cout << "ERROR: " << parsedData.err << std::endl;
+				Log::Error("Parsed data error: {}", parsedData.err.msg);
 				return 1;
 			}
-			std::cout << "Data Section: \n";
+			fmt::print("Data Section: \n");
 			parsedData.dataSection.Print();
 
-			std::cout << "INSTRUCTIONS:\n";
+			fmt::print("Instructions:\n");
 			for (auto &inst : parsedData.instructions)
 			{
 				std::string fmt = RISC::Instruction::FormatInstruction(inst);
-
-				std::cout << fmt << std::endl;
+				fmt::print("{}\n", fmt);
 			}
 		}
 		else
 		{
-			std::cout << "Was not able to open the file\n";
+			Log::Error("Was not able to open the file");
 		}
 	}
 	else

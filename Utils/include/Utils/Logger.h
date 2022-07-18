@@ -82,6 +82,20 @@ namespace Util
 			}
 		}
 
+		template <class... ArgsType>
+		inline static void Print(std::string_view fmt, ArgsType &&...args)
+		{
+			if (enabled)
+			{
+				int oldSize = m_Buf.size();
+				int color = 0xFFFFFFFF;
+				std::string msg = PrintWithColor<ArgsType...>("[Print] ", "white", fmt, args...);
+				msg.append("\n");
+				m_Buf.append(msg.c_str());
+				AddOffset(oldSize, color);
+			}
+		}
+
 		static void ClearBuffer();
 		static void Draw(std::string_view title, bool *p_open = nullptr, ImGuiWindowFlags flags = ImGuiWindowFlags_None);
 		static bool enabled;

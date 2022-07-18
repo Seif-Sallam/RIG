@@ -12,4 +12,10 @@ add_library(RISC
 target_include_directories(RISC
 	PRIVATE
 	include/
+	../Utils/include
+)
+
+target_link_libraries(RISC
+	PRIVATE
+		Utils
 )

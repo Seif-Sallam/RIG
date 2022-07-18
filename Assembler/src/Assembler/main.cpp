@@ -8,7 +8,9 @@
 
 #include <Parser/Parser.h>
 #include <RISC/Translator.h>
+#include <Utils/Logger.h>
 
+typedef Util::Logger Log;
 int main(int argc, char const *argv[])
 {
 	if (argc < 3 || (!isdigit(argv[1][0])))
@@ -29,15 +31,15 @@ int main(int argc, char const *argv[])
 		bool success = parser.ReadFile(file);
 		if (!success)
 		{
-			std::cerr << "failed to open the file: " << file << std::endl;
-			// continue;
+			Log::Error("Failed To open the file {}", file);
+			continue;
 		}
 
 		auto parseOutput = parser.Parse();
 		if (parseOutput.err)
 		{
-			std::cerr << "Failed to parse the file: " << file << "\nerr: " << parseOutput.err << std::endl;
-			// continue;
+			Log::Error("Failed to parse the file {}, err {}", parseOutput.err.msg);
+			continue;
 		}
 		std::ofstream outputFile;
 		std::string title = file;
@@ -63,7 +65,8 @@ int main(int argc, char const *argv[])
 		for (auto &inst : parseOutput.instructions)
 		{
 			auto instStr = RISC::Instruction::FormatInstruction(inst);
-			std::cout << "\t" << instStr << std::endl;
+			Log::Info("Instruction Str: {}", instStr);
+
 			Assembled assembledInst;
 			assembledInst.asInt = translator.Assemble(inst);
 			if (mode == 0)
@@ -82,7 +85,7 @@ int main(int argc, char const *argv[])
 			}
 		}
 		outputFile.close();
-		std::cout << "Generated file: " << title << std::endl;
+		Log::Success("Generated File: {}", title);
 	}
 	return 0;
 }

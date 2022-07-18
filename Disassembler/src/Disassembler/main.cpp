@@ -4,6 +4,9 @@
 #include <iomanip>
 
 #include <RISC/Translator.h>
+#include <Utils/Logger.h>
+
+typedef Util::Logger Log;
 
 int main(int argc, char const *argv[])
 {
@@ -16,7 +19,7 @@ int main(int argc, char const *argv[])
 
 	RISC::Translator translator;
 
-	for (uint32_t i = 1; i < argc; i++)
+	for (int i = 1; i < argc; i++)
 	{
 		std::vector<RISC::Instruction> instructions;
 		std::ifstream inputFile;
@@ -24,16 +27,17 @@ int main(int argc, char const *argv[])
 		{
 			if (!inputFile.is_open())
 			{
-				std::cerr << "failed to open the file: " << argv[i] << std::endl;
+				Log::Error("Failed to open the file {}", argv[i]);
 				continue;
 			}
-			std::cout << "reading: " << argv[i] << std::endl;
-			uint32_t fileSize = inputFile.tellg();
+			Log::Info("Reading: {}", argv[i]);
+
+			size_t fileSize = inputFile.tellg();
 			inputFile.seekg(std::ios::beg);
 			char *fileContent = new char[fileSize];
 
 			inputFile.read(fileContent, fileSize);
-			for (uint32_t i = 0; i < fileSize; i += 4)
+			for (size_t i = 0; i < fileSize; i += 4)
 			{
 				uint32_t instBinary = (unsigned char)fileContent[i] | (unsigned char)fileContent[i + 1] << 8 | (unsigned char)fileContent[i + 2] << 16 | (unsigned char)fileContent[i + 3] << 24;
 				instructions.push_back(translator.Dissassemble(instBinary));
@@ -45,7 +49,7 @@ int main(int argc, char const *argv[])
 		std::ofstream outputFile;
 		std::string title = argv[i];
 		{
-			uint32_t index = title.find(".");
+			size_t index = title.find(".");
 			if (index != std::string::npos)
 			{
 				title.erase(title.begin() + index, title.end());
@@ -53,16 +57,17 @@ int main(int argc, char const *argv[])
 			}
 		}
 		outputFile.open(title);
-		std::cout << ".text\n";
+		Log::Info(".text");
 		outputFile << ".text\n";
 		for (auto &inst : instructions)
 		{
 			auto str = RISC::Instruction::FormatInstruction(inst);
-			std::cout << "\t" << str << std::endl;
+			Log::Info("\t{}", str);
 			outputFile << str << std::endl;
 		}
 		outputFile.close();
-		std::cout << "Generated file: " << title << std::endl;
+
+		Log::Success("Generated File: {}", title);
 	}
 	return 0;
 }

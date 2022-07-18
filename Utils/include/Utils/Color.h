@@ -14,8 +14,8 @@ inline std::string PrintWithColor(std::string_view startStr, std::string_view co
 	HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
 	static constexpr std::string_view colors[] = {"blue", "green", "cyan", "red", "magenta", "yellow"};
 	static constexpr size_t numOfColors = sizeof(colors) / sizeof(*colors);
-	size_t col = 7;
-	for (size_t i = 0; i < numOfColors; i++)
+	WORD col = 7;
+	for (WORD i = 0; i < numOfColors; i++)
 		if (color == colors[i])
 		{
 			col = i + 9;
