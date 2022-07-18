@@ -12,6 +12,8 @@
 // TODO
 // - multiline comments vs single-line: latter is blocking start of a ML
 
+// Function to make sure that two iteratable objects are eqaual according to binary predicate
+// returning true on equality.
 template <class InputIt1, class InputIt2, class BinaryPredicate>
 bool equals(InputIt1 first1, InputIt1 last1,
 			InputIt2 first2, InputIt2 last2, BinaryPredicate p)
@@ -35,7 +37,9 @@ TextEditor::TextEditor()
 	  mStartTime(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count())
 {
 	SetPalette(GetDarkPalette());
+
 	SetLanguageDefinition(LanguageDefinition::HLSL());
+	// We have to have at least one line
 	mLines.push_back(Line());
 }
 
@@ -43,14 +47,18 @@ TextEditor::~TextEditor()
 {
 }
 
+// A setter function, that sets the language defintion, so that we can do the palette coloring
 void TextEditor::SetLanguageDefinition(const LanguageDefinition &aLanguageDef)
 {
 	mLanguageDefinition = aLanguageDef;
 	mRegexList.clear();
 
+	// We are just putting all the language defintion regex-s in the regex list of the text editor
+	// so that we can colorize the document.
 	for (auto &r : mLanguageDefinition.mTokenRegexStrings)
 		mRegexList.push_back(std::make_pair(std::regex(r.first, std::regex_constants::optimize), r.second));
 
+	// Document Colorize.
 	Colorize();
 }
 
@@ -314,15 +322,15 @@ TextEditor::Coordinates TextEditor::ScreenPosToCoordinates(const ImVec2 &aPositi
 	ImVec2 origin = ImGui::GetCursorScreenPos();
 	ImVec2 local(aPosition.x - origin.x, aPosition.y - origin.y);
 
-	int lineNo = std::max(0, (int)floor(local.y / mCharAdvance.y));
+	int32_t lineNo = std::max(0, (int)floor(local.y / mCharAdvance.y));
 
-	int columnCoord = 0;
+	int32_t columnCoord = 0;
 
 	if (lineNo >= 0 && lineNo < (int)mLines.size())
 	{
 		auto &line = mLines.at(lineNo);
 
-		int columnIndex = 0;
+		int32_t columnIndex = 0;
 		float columnX = 0.0f;
 
 		while ((size_t)columnIndex < line.size())
@@ -483,8 +491,8 @@ int TextEditor::GetCharacterIndex(const Coordinates &aCoordinates) const
 	if (aCoordinates.mLine >= mLines.size())
 		return -1;
 	auto &line = mLines[aCoordinates.mLine];
-	int c = 0;
-	int i = 0;
+	int32_t c = 0;
+	int32_t i = 0;
 	for (; i < line.size() && c < aCoordinates.mColumn;)
 	{
 		if (line[i].mChar == '\t')
@@ -727,15 +735,27 @@ void TextEditor::HandleKeyboardInputs()
 		else if (!IsReadOnly() && !ctrl && !shift && !alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Delete)))
 			Delete();
 		else if (!IsReadOnly() && ctrl && !shift && !alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Delete)))
+		{
+			MoveRight(1, true, true);
 			Delete();
+		}
 		else if (!IsReadOnly() && !ctrl && shift && !alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Delete)))
+		{
+			MoveHome(false);
+			MoveEnd(true);
 			Delete();
+		}
 		else if (!IsReadOnly() && !ctrl && !shift && !alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Backspace)))
 			Backspace();
 		else if (!IsReadOnly() && ctrl && !shift && !alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Backspace)))
+		{
+			MoveLeft(1, true, true);
 			Backspace();
+		}
 		else if (!IsReadOnly() && !ctrl && shift && !alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Backspace)))
+		{
 			Backspace();
+		}
 		else if (!ctrl && !shift && !alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Insert)))
 			mOverwrite ^= true;
 		else if (ctrl && !shift && !alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Insert)))
@@ -2130,16 +2150,20 @@ void TextEditor::ProcessInputs()
 
 void TextEditor::Colorize(int aFromLine, int aLines)
 {
+	// To know the number of lines we need to colorize, normally it is all of them.
+	// When aLines == -1 then this means it is the end.
 	int toLine = aLines == -1 ? (int)mLines.size() : std::min((int)mLines.size(), aFromLine + aLines);
 	mColorRangeMin = std::min(mColorRangeMin, aFromLine);
-	mColorRangeMax = std::max(mColorRangeMax, toLine);
 	mColorRangeMin = std::max(0, mColorRangeMin);
+	mColorRangeMax = std::max(mColorRangeMax, toLine);
 	mColorRangeMax = std::max(mColorRangeMin, mColorRangeMax);
 	mCheckComments = true;
 }
 
+// Colorizing a range of lines, where actual colorizing happens
 void TextEditor::ColorizeRange(int aFromLine, int aToLine)
 {
+	// Makes sure that we are not doing unnecc. work
 	if (mLines.empty() || aFromLine >= aToLine)
 		return;
 
@@ -2155,6 +2179,7 @@ void TextEditor::ColorizeRange(int aFromLine, int aToLine)
 		if (line.empty())
 			continue;
 
+		// In the beginning we add all the characters to a buffer and reset its color
 		buffer.resize(line.size());
 		for (size_t j = 0; j < line.size(); ++j)
 		{
@@ -2168,6 +2193,7 @@ void TextEditor::ColorizeRange(int aFromLine, int aToLine)
 
 		auto last = bufferEnd;
 
+		// We then iterate through them and find tokens to color it with
 		for (auto first = bufferBegin; first != last;)
 		{
 			const char *token_begin = nullptr;
@@ -2176,6 +2202,7 @@ void TextEditor::ColorizeRange(int aFromLine, int aToLine)
 
 			bool hasTokenizeResult = false;
 
+			// if it has a tokenizer, then this will get the token result from here
 			if (mLanguageDefinition.mTokenize != nullptr)
 			{
 				if (mLanguageDefinition.mTokenize(first, last, token_begin, token_end, token_color))
@@ -2189,10 +2216,11 @@ void TextEditor::ColorizeRange(int aFromLine, int aToLine)
 
 				for (auto &p : mRegexList)
 				{
+					// we search through our regular expressions
 					if (std::regex_search(first, last, results, p.first, std::regex_constants::match_continuous))
 					{
+						// until we find a result and then we have a color to add from the regex list :D
 						hasTokenizeResult = true;
-
 						auto &v = *results.begin();
 						token_begin = v.first;
 						token_end = v.second;
@@ -2204,10 +2232,12 @@ void TextEditor::ColorizeRange(int aFromLine, int aToLine)
 
 			if (hasTokenizeResult == false)
 			{
+				// if we don't find something, maybe we are not looking at the correct start of the string?
 				first++;
 			}
 			else
 			{
+				// If we do, we then see what color it is
 				const size_t token_length = token_end - token_begin;
 
 				if (token_color == PaletteIndex::Identifier)
@@ -2233,10 +2263,11 @@ void TextEditor::ColorizeRange(int aFromLine, int aToLine)
 							token_color = PaletteIndex::PreprocIdentifier;
 					}
 				}
-
+				// colorizing each glyph alone
 				for (size_t j = 0; j < token_length; ++j)
 					line[(token_begin - bufferBegin) + j].mColorIndex = token_color;
 
+				// we continue from where we ended
 				first = token_end;
 			}
 		}
