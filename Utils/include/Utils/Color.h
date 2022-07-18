@@ -9,7 +9,7 @@
 #include <windows.h>
 
 template <class... ArgsType>
-std::string PrintWithColor(std::string_view startStr, std::string_view color, std::string_view linefmt, ArgsType &&...args)
+inline std::string PrintWithColor(std::string_view startStr, std::string_view color, std::string_view linefmt, ArgsType &&...args)
 {
 	HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
 	static constexpr std::string_view colors[] = {"blue", "green", "cyan", "red", "magenta", "yellow"};
@@ -34,7 +34,7 @@ std::string PrintWithColor(std::string_view startStr, std::string_view color, st
 #else
 
 template <class... ArgsType>
-std::string PrintWithColor(std::string_view startStr, std::string_view color, std::string_view linefmt, ArgsType &&...args)
+inline std::string PrintWithColor(std::string_view startStr, std::string_view color, std::string_view linefmt, ArgsType &&...args)
 {
 	static constexpr std::string_view colors[] = {"white", "blue", "green", "cyan", "red", "magenta", "yellow"};
 	static constexpr std::string_view colorCodes[] = {"\033[0m", "\033[0;34m",
