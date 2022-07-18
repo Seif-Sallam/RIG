@@ -1,11 +1,14 @@
 #pragma once
 
-#include "Color.h"
-
 #include <string>
 #include <vector>
 
+#include <fmt/core.h>
+#include <fmt/color.h>
+
 #include "imgui.h"
+
+#define COLOR(str) fmt::color::str
 
 namespace Util
 {
@@ -19,8 +22,9 @@ namespace Util
 			{
 				int oldSize = m_Buf.size();
 				int color = 0xFFFFFFFF;
-				std::string msg = PrintWithColor<ArgsType...>("[Debug] ", "white", fmt, args...);
-				msg.append("\n");
+				std::string msg = fmt::format(fmt, std::forward<ArgsType>(args)...);
+				msg = fmt::format("{}{}\n", "[Debug] ", msg);
+				fmt::print(fg(fmt::color::white), "{}", msg);
 				m_Buf.append(msg.c_str());
 				AddOffset(oldSize, color);
 			}
@@ -33,8 +37,9 @@ namespace Util
 			{
 				int oldSize = m_Buf.size();
 				int color = 0xFFee0000;
-				std::string msg = PrintWithColor<ArgsType...>("[Info] ", "blue", fmt, args...);
-				msg.append("\n");
+				std::string msg = fmt::format(fmt, std::forward<ArgsType>(args)...);
+				msg = fmt::format("{}{}\n", "[Info] ", msg);
+				fmt::print(fg(fmt::color::sky_blue), "{}", msg);
 				m_Buf.append(msg.c_str());
 				AddOffset(oldSize, color);
 			}
@@ -47,9 +52,9 @@ namespace Util
 			{
 				int oldSize = m_Buf.size();
 				int color = 0xFF0000FF;
-				std::string msg = PrintWithColor<ArgsType...>("[Error] ", "red", fmt, args...);
-				msg.append("\n");
-				m_Buf.append(msg.c_str());
+				std::string msg = fmt::format(fmt, std::forward<ArgsType>(args)...);
+				msg = fmt::format("{}{}\n", "[Error] ", msg);
+				fmt::print(fg(fmt::color::red), "{}", msg);
 				AddOffset(oldSize, color);
 			}
 		}
@@ -61,8 +66,9 @@ namespace Util
 			{
 				int oldSize = m_Buf.size();
 				int color = 0xFF00FF00;
-				std::string msg = PrintWithColor<ArgsType...>("[Success] ", "green", fmt, args...);
-				msg.append("\n");
+				std::string msg = fmt::format(fmt, std::forward<ArgsType>(args)...);
+				msg = fmt::format("{}{}\n", "[Success] ", msg);
+				fmt::print(fg(fmt::color::green), "{}", msg);
 				m_Buf.append(msg.c_str());
 				AddOffset(oldSize, color);
 			}
@@ -75,8 +81,9 @@ namespace Util
 			{
 				int oldSize = m_Buf.size();
 				int color = 0xFF00FFFF;
-				std::string msg = PrintWithColor<ArgsType...>("[Warning] ", "yellow", fmt, args...);
-				msg.append("\n");
+				std::string msg = fmt::format(fmt, std::forward<ArgsType>(args)...);
+				msg = fmt::format("{}{}\n", "[Warning] ", msg);
+				fmt::print(fg(fmt::color::yellow), "{}", msg);
 				m_Buf.append(msg.c_str());
 				AddOffset(oldSize, color);
 			}
@@ -89,8 +96,11 @@ namespace Util
 			{
 				int oldSize = m_Buf.size();
 				int color = 0xFFFFFFFF;
-				std::string msg = PrintWithColor<ArgsType...>("[Print] ", "white", fmt, args...);
-				msg.append("\n");
+
+				std::string msg = fmt::format(fmt, std::forward<ArgsType>(args)...);
+				msg = fmt::format("{}{}\n", "[Print] ", msg);
+				fmt::print(fg(fmt::color::white), "{}", msg);
+
 				m_Buf.append(msg.c_str());
 				AddOffset(oldSize, color);
 			}

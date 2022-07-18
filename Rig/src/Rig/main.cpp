@@ -12,7 +12,6 @@
 
 #include "IDE/MainWindow.h"
 
-#include "Utils/Color.h"
 #include "Utils/Logger.h"
 
 typedef Util::Logger Log;
@@ -23,7 +22,8 @@ int main(int argc, const char *argv[])
 	Log::Warning("Hello, World! {}", "Warning");
 	Log::Error("Hello, World! {}", "Error");
 	Log::Success("Hello, World! {}", "Success");
-	if (false)
+
+	if (true)
 	{
 		const std::string filePath = std::string(RESOURCES_DIR) + std::string("/testfile.txt");
 		Parser::Parser parser;
@@ -35,14 +35,14 @@ int main(int argc, const char *argv[])
 				Log::Error("Parsed data error: {}", parsedData.err.msg);
 				return 1;
 			}
-			fmt::print("Data Section: \n");
+			Log::Info("Data Section:");
 			parsedData.dataSection.Print();
 
-			fmt::print("Instructions:\n");
+			Log::Info("Instructions:");
 			for (auto &inst : parsedData.instructions)
 			{
 				std::string fmt = RISC::Instruction::FormatInstruction(inst);
-				fmt::print("{}\n", fmt);
+				Log::Print("{}", fmt);
 			}
 		}
 		else
@@ -52,9 +52,9 @@ int main(int argc, const char *argv[])
 	}
 	else
 	{
-		IDE::MainWindow mainWindow(argc, argv);
-
-		mainWindow.Run();
 	}
+	IDE::MainWindow mainWindow(argc, argv);
+
+	mainWindow.Run();
 	return 0;
 }

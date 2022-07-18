@@ -53,115 +53,109 @@ namespace RISC
 		Log::Info("Items:");
 		for (auto &item : m_Items)
 		{
-			fmt::print("\tLabel: {}\n", item.m_Name);
-			fmt::print("\tSize: {}\n", item.m_Size);
+			Log::Print("\tLabel: {}", item.m_Name);
+			Log::Print("\tSize: {}", item.m_Size);
 			switch (item.m_Type)
 			{
 			case DataItem::WORD:
 			{
-				fmt::print("\tType: Word\n");
-				fmt::print("\tData:\v");
-				fmt::print("\t{{ ");
+				Log::Print("\tType: Word");
+				Log::Print("\tData:");
 				uint32_t *data = (uint32_t *)item.m_Data;
+				std::string dataStr;
 				for (uint32_t i = 0; i < item.m_Size; i++)
 				{
-					fmt::print("{}", data[i]);
-					if (i != item.m_Size - 1)
-						fmt::print(",");
+					dataStr += std::to_string(data[i]) + ",";
+					if (i == item.m_Size - 1)
+						dataStr.pop_back();
 				}
-				fmt::print(" }}\n");
+				Log::Print("\t\t{{ {} }}", dataStr);
 			}
 			break;
 			case DataItem::HALF_WORD:
 			{
-				fmt::print("\tType: Half Word\n");
-				fmt::print("\tData:\v");
-				fmt::print("\t{{ ");
+				Log::Print("\tType: Half Word");
+				Log::Print("\tData:");
 				uint16_t *data = (uint16_t *)item.m_Data;
+				std::string dataStr;
 				for (uint32_t i = 0; i < item.m_Size; i++)
 				{
-					fmt::print("{}", data[i]);
-					if (i != item.m_Size - 1)
-						fmt::print(", ");
+					dataStr += std::to_string(data[i]) + ",";
+					if (i == item.m_Size - 1)
+						dataStr.pop_back();
 				}
-				fmt::print(" }}\n");
+				Log::Print("\t\t{{ {} }}", dataStr);
 			}
 			break;
 			case DataItem::BYTE:
 			{
-				fmt::print("\tType: Byte\n");
-				fmt::print("\tData:\v");
-				fmt::print("\t{{ ");
+				Log::Print("\tType: Byte");
+				Log::Print("\tData:");
 				uint8_t *data = (uint8_t *)item.m_Data;
+				std::string dataStr;
 				for (uint32_t i = 0; i < item.m_Size; i++)
 				{
-					fmt::print("{}", data[i]);
-					if (i != item.m_Size - 1)
-						fmt::print(", ");
+					dataStr += std::to_string(data[i]) + ",";
+					if (i == item.m_Size - 1)
+						dataStr.pop_back();
 				}
-				fmt::print(" }}\n");
+				Log::Print("\t\t{{ {} }}", dataStr);
 			}
 			break;
 			case DataItem::SPACE:
 			{
-				fmt::print("\tType: Space\n");
-				fmt::print("\tData:\v");
-				fmt::print("\t{{ ");
+				Log::Print("\tType: Space");
+				Log::Print("\tData:");
 				uint32_t data = ((uint32_t *)item.m_Data)[0];
-				fmt::print("{} }}\n", data);
+				Log::Print("\t\t{{ {} }}", data);
 			}
 			break;
 			case DataItem::FLOAT:
 			{
-				fmt::print("\tType: Float\n");
-				fmt::print("\tData:\v");
-				fmt::print("\t{{ ");
+				Log::Print("\tType: Float");
+				Log::Print("\tData:");
 				float *data = (float *)item.m_Data;
+				std::string dataStr;
 				for (uint32_t i = 0; i < item.m_Size; i++)
 				{
-					fmt::print("{}", data[i]);
-					if (i != item.m_Size - 1)
-						fmt::print(", ");
+					dataStr += std::to_string(data[i]) + ",";
+					if (i == item.m_Size - 1)
+						dataStr.pop_back();
 				}
-				fmt::print(" }}\n");
+				Log::Print("\t\t{{ {} }}", dataStr);
 			}
 			break;
 			case DataItem::DOUBLE:
 			{
-				fmt::print("\tType: Double\n");
-				fmt::print("\tData:\v");
-				fmt::print("\t{{ ");
+				Log::Print("\tType: Double");
+				Log::Print("\tData:");
 				double *data = (double *)item.m_Data;
+				std::string dataStr;
 				for (uint32_t i = 0; i < item.m_Size; i++)
 				{
-					fmt::print("{}", data[i]);
-					if (i != item.m_Size - 1)
-						fmt::print(", ");
+					dataStr += std::to_string(data[i]) + ",";
+					if (i == item.m_Size - 1)
+						dataStr.pop_back();
 				}
-				fmt::print(" }}\n");
+				Log::Print("\t\t{{ {} }}", dataStr);
 			}
 			break;
 			case DataItem::STRING:
 			{
-				fmt::print("\tType: String\n");
-				fmt::print("\tData:\v");
-				fmt::print("\t{{ \"");
-				char *data = (char *)item.m_Data;
-				for (uint32_t i = 0; i < item.m_Size; i++)
-				{
-					fmt::print("{}", data[i]);
-				}
-				fmt::print("\" }}\n");
+				Log::Print("\tType: String");
+				Log::Print("\tData:");
+				char *data = new char[item.m_Size + 1];
+				memcpy((void *)data, (void *)item.m_Data, item.m_Size);
+				data[item.m_Size] = '\0';
+				Log::Print("\t\t{{ \"{}\" }}", data);
 			}
 			break;
 			case DataItem::C_STRING:
 			{
-				fmt::print("\tType: C-String\n");
-				fmt::print("\tData:\v");
-				fmt::print("\t{{ \"");
+				Log::Print("\tType: C-String");
+				Log::Print("\tData:");
 				char *data = (char *)item.m_Data;
-				fmt::print(data);
-				fmt::print("\" }}\n");
+				Log::Print("\t\t{{ \"{}\" }}", data);
 			}
 			break;
 			}

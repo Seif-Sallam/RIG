@@ -129,7 +129,7 @@ namespace Parser
 
 	void Parser::PrintFileContent() const
 	{
-		fmt::print("{}", m_FileContent);
+		Log::Print("{}", m_FileContent);
 	}
 
 	Parser::~Parser()
