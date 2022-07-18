@@ -12,6 +12,8 @@
 
 #include <stdio.h>
 
+#include <Utils/Logger.h>
+
 namespace IDE
 {
 
@@ -56,8 +58,8 @@ namespace IDE
 		ImGui::DockBuilderAddNode(m_DockID, ImGuiDockNodeFlags_DockSpace); // Add empty node
 		ImGui::DockBuilderSetNodeSize(m_DockID, ImVec2((float)m_Width, (float)m_Height));
 		m_DockIDLeft = ImGui::DockBuilderSplitNode(m_DockID, ImGuiDir_Left, 0.20f, NULL, &m_DockID);
-		m_DockIDRight = ImGui::DockBuilderSplitNode(m_DockID, ImGuiDir_Right, 0.20f, NULL, &m_DockID);
-		m_DockIDBottom = ImGui::DockBuilderSplitNode(m_DockID, ImGuiDir_Down, 0.20f, NULL, &m_DockID);
+		m_DockIDRight = ImGui::DockBuilderSplitNode(m_DockID, ImGuiDir_Right, 0.30f, NULL, &m_DockID);
+		m_DockIDBottom = ImGui::DockBuilderSplitNode(m_DockID, ImGuiDir_Down, 0.40f, NULL, &m_DockID);
 		ImGui::DockBuilderDockWindow(m_TextEditorWindowName.c_str(), m_DockID);
 		ImGui::DockBuilderDockWindow(m_LogWindowName.c_str(), m_DockIDBottom);
 		ImGui::DockBuilderDockWindow(m_RegisterFileWindowName.c_str(), m_DockIDRight);
@@ -255,11 +257,7 @@ namespace IDE
 
 	void MainWindow::LogImGui()
 	{
-		ImGui::Begin(m_LogWindowName.c_str());
-		{
-			ImGui::TextUnformatted("Log Window Text");
-		}
-		ImGui::End();
+		Util::Logger::Draw(m_LogWindowName.c_str(), nullptr, ImGuiWindowFlags_None);
 	}
 
 	void MainWindow::RegisterFileImGui()

@@ -9,7 +9,7 @@
 #include <windows.h>
 
 template <class... ArgsType>
-std::string PrintWithColor(std::string_view color, std::string_view linefmt, ArgsType &&...args)
+std::string PrintWithColor(std::string_view startStr, std::string_view color, std::string_view linefmt, ArgsType &&...args)
 {
 	HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
 	static constexpr std::string_view colors[] = {"blue", "green", "cyan", "red", "magenta", "yellow"};
@@ -22,7 +22,9 @@ std::string PrintWithColor(std::string_view color, std::string_view linefmt, Arg
 			break;
 		}
 	std::string msg = fmt::format(linefmt, std::forward<ArgsType>(args)...);
+	msg = fmt::format("{}{}", startStr, msg);
 	SetConsoleTextAttribute(hConsole, col);
+
 	fmt::print("{}\n", msg);
 	SetConsoleTextAttribute(hConsole, 7);
 
@@ -32,7 +34,7 @@ std::string PrintWithColor(std::string_view color, std::string_view linefmt, Arg
 #else
 
 template <class... ArgsType>
-std::string PrintWithColor(std::string_view color, std::string_view linefmt, ArgsType &&...args)
+std::string PrintWithColor(std::string_view startStr, std::string_view color, std::string_view linefmt, ArgsType &&...args)
 {
 	static constexpr std::string_view colors[] = {"white", "blue", "green", "cyan", "red", "magenta", "yellow"};
 	static constexpr std::string_view colorCodes[] = {"\033[0m", "\033[0;34m",
@@ -47,7 +49,7 @@ std::string PrintWithColor(std::string_view color, std::string_view linefmt, Arg
 			break;
 		}
 	std::string msg = fmt::format(linefmt, std::forward<ArgsType>(args)...);
-
+	msg = fmt::format("{}{}", startStr, msg);
 	fmt::print("{}{}{}\n", *col, msg, *noColor);
 	return msg;
 }

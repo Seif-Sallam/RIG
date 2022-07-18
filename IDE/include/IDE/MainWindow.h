@@ -55,6 +55,4 @@ namespace IDE
 		bool m_LayoutInitialized = false;
 	};
 
-
-
 }

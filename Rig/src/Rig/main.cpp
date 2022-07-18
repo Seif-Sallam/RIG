@@ -17,11 +17,11 @@
 
 int main(int argc, const char *argv[])
 {
-	Utils::Logger::Debug("Hello, World! {}", "Debug");
-	Utils::Logger::Info("Hello, World! {}", "Info");
-	Utils::Logger::Warning("Hello, World! {}", "Warning");
-	Utils::Logger::Error("Hello, World! {}", "Error");
-	Utils::Logger::Success("Hello, World! {}", "Success");
+	Util::Logger::Debug("Hello, World! {}", "Debug");
+	Util::Logger::Info("Hello, World! {}", "Info");
+	Util::Logger::Warning("Hello, World! {}", "Warning");
+	Util::Logger::Error("Hello, World! {}", "Error");
+	Util::Logger::Success("Hello, World! {}", "Success");
 	if (false)
 	{
 		const std::string filePath = std::string(RESOURCES_DIR) + std::string("/testfile.txt");

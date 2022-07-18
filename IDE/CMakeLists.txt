@@ -12,6 +12,7 @@ add_library(IDE
 target_include_directories(IDE
 	PRIVATE
 	include/
+	../Utils/include
 )
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -27,4 +28,5 @@ target_link_libraries(IDE
 	glfw
 	glm
 	imgui
+	Utils
 )

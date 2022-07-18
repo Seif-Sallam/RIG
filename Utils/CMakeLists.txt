@@ -12,6 +12,7 @@ add_library(Utils
 target_link_libraries(Utils
 	PUBLIC
 	fmt
+	imgui
 )
 
 target_include_directories(Utils
