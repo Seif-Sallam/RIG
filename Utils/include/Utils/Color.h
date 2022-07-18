@@ -12,17 +12,15 @@ template <class... ArgsType>
 std::string PrintWithColor(std::string_view color, std::string_view linefmt, ArgsType &&...args)
 {
 	HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
-	static constexpr std::string_view colors[] = {"white", "blue", "green", "cyan", "red", "magenta", "yellow"};
+	static constexpr std::string_view colors[] = {"blue", "green", "cyan", "red", "magenta", "yellow"};
 	static constexpr size_t numOfColors = sizeof(colors) / sizeof(*colors);
-	int col = 7;
+	size_t col = 7;
 	for (size_t i = 0; i < numOfColors; i++)
 		if (color == colors[i])
 		{
-			col = i - 1;
+			col = i + 9;
 			break;
 		}
-	if (col == 0)
-		col = 7;
 	std::string msg = fmt::format(linefmt, std::forward<ArgsType>(args)...);
 	SetConsoleTextAttribute(hConsole, col);
 	fmt::print("{}\n", msg);
