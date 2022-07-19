@@ -918,14 +918,6 @@ void TextEditor::Render()
 	}
 
 
-	ImGui::Dummy(ImVec2((longest + 2), mLines.size() * mCharAdvance.y));
-
-	if (mScrollToCursor)
-	{
-		EnsureCursorVisible();
-		ImGui::SetWindowFocus();
-		mScrollToCursor = false;
-	}
 
 	// suggestions window
 	if (mACOpened) {
@@ -955,6 +947,14 @@ void TextEditor::Render()
 		if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Escape)))
 			mACOpened = false;
 	}
+	ImGui::Dummy(ImVec2((longest + 2), mLines.size() * mCharAdvance.y));
+
+	if (mScrollToCursor)
+	{
+		EnsureCursorVisible();
+		ImGui::SetWindowFocus();
+		mScrollToCursor = false;
+	}
 }
 
 ImVec2 TextEditor::CoordinatesToScreenPos(const TextEditor::Coordinates& aPosition) const
@@ -968,7 +968,6 @@ ImVec2 TextEditor::CoordinatesToScreenPos(const TextEditor::Coordinates& aPositi
 			dist += mTabSize;
 		else dist++;
 	}
-
 
 	int retY = origin.y + aPosition.mLine * mCharAdvance.y;
 	int retX = origin.x + GetTextStart() * mCharAdvance.x + dist * mCharAdvance.x - ImGui::GetScrollX();
