@@ -75,6 +75,9 @@ TextEditor::TextEditor()
 	, mFindOpened(false)
 	, mReplaceOpened(false)
 	, mFindJustOpened(false)
+	, mFindNext(false)
+	, mFindFocused(false)
+	, mReplaceFocused(false)
 {
 	memset(mFindWord, 0, 256 * sizeof(char));
 	memset(mReplaceWord, 0, 256 * sizeof(char));
@@ -113,6 +116,8 @@ TextEditor::TextEditor()
 	m_Shortcuts[(int)TextEditor::ShortcutID::IndentShift] 				= TextEditor::Shortcut(ImGuiKey_Tab, 		K_NOT_USED, M_NOT_USED, M_NOT_USED, M_CAN_USE); 	// TAB
 	m_Shortcuts[(int)TextEditor::ShortcutID::Find] 						= TextEditor::Shortcut(ImGuiKey_F, 			K_NOT_USED, M_NOT_USED, M_MUST_USE, M_CAN_USE); 	// TAB
 	m_Shortcuts[(int)TextEditor::ShortcutID::Replace] 					= TextEditor::Shortcut(ImGuiKey_H, 			K_NOT_USED, M_NOT_USED, M_MUST_USE, M_CAN_USE); 	// TAB
+	m_Shortcuts[(int)TextEditor::ShortcutID::FindNext] 					= TextEditor::Shortcut(ImGuiKey_F3, 		K_NOT_USED, M_NOT_USED, M_NOT_USED, M_NOT_USED); 	// TAB
+
 }
 
 TextEditor::~TextEditor()
@@ -1055,7 +1060,7 @@ void TextEditor::RenderInternal(const char* aTitle)
 	}
 
 	assert(mLineBuffer.empty());
-	mFocused = ImGui::IsWindowFocused();
+	mFocused = ImGui::IsWindowFocused() || mFindFocused || mReplaceFocused;
 
 	auto contentSize = ImGui::GetWindowContentRegionMax();
 	auto drawList = ImGui::GetWindowDrawList();
@@ -1392,7 +1397,38 @@ void TextEditor::Render(const char* aTitle, const ImVec2& aSize, bool aBorder)
 		ImGui::BeginChild(("##ted_findwnd" + std::string(aTitle)).c_str(), ImVec2(220.0f, mReplaceOpened ? 80.0f : 40.0f), true);
 
 		ImGui::PushItemWidth(-45);
-		if (ImGui::InputText(("##ted_findtextbox" + std::string(aTitle)).c_str(), mFindWord, 256, ImGuiInputTextFlags_EnterReturnsTrue)) {
+
+		// check for findnext shortcut here...
+		ShortcutID curActionID = ShortcutID::Count;
+		ImGuiIO& io = ImGui::GetIO();
+		auto shift = io.KeyShift;
+		auto ctrl = io.ConfigMacOSXBehaviors ? io.KeySuper : io.KeyCtrl;
+		auto alt = io.ConfigMacOSXBehaviors ? io.KeyCtrl : io.KeyAlt;
+		for (int i = 0; i < m_Shortcuts.size(); i++) {
+			auto sct = m_Shortcuts[i];
+
+			if (sct.Key1 == -1)
+				continue;
+
+			if (ImGui::IsKeyPressed(sct.Key1) && ((sct.Key2 != -1 && ImGui::IsKeyPressed(sct.Key2)) || sct.Key2 == -1)) {
+				if (((sct.Ctrl == 0 && !ctrl) || (sct.Ctrl == 1 && ctrl) || (sct.Ctrl == 2)) &&		// ctrl check
+					((sct.Alt == 0 && !alt) || (sct.Alt == 1 && alt) || (sct.Alt == 2)) &&			// alt check
+					((sct.Shift == 0 && !shift) || (sct.Shift == 1 && shift) || (sct.Shift == 2))) {// shift check
+
+					curActionID = (TextEditor::ShortcutID)i;
+				}
+			}
+		}
+		mFindNext = curActionID == TextEditor::ShortcutID::FindNext;
+
+		if (mFindJustOpened) {
+			std::string txt = GetSelectedText();
+			if (txt.size() > 0)
+				strcpy(mFindWord, txt.c_str());
+		}
+
+
+		if (ImGui::InputText(("##ted_findtextbox" + std::string(aTitle)).c_str(), mFindWord, 256, ImGuiInputTextFlags_EnterReturnsTrue) || mFindNext) {
 			auto curPos = mState.mCursorPosition;
 			size_t cindex = 0;
 			for (size_t ln = 0; ln < curPos.mLine; ln++)
@@ -1413,6 +1449,11 @@ void TextEditor::Render(const char* aTitle, const ImVec2& aSize, bool aBorder)
 					if (cindex + charCount > textLoc) {
 						curPos.mLine = (int)ln;
 						curPos.mColumn = (int)textLoc - (int)cindex;
+						auto& line = mLines[curPos.mLine];
+						for (int i = 0; i < line.size(); i++)
+							if (line[i].mChar == '\t')
+								curPos.mColumn += (mTabSize - 1);
+
 						break;
 					}
 					else // just keep adding
@@ -1424,10 +1465,16 @@ void TextEditor::Render(const char* aTitle, const ImVec2& aSize, bool aBorder)
 				selEnd.mColumn += (int)strlen(mFindWord);
 				SetSelection(curPos, selEnd);
 				SetCursorPosition(selEnd);
-
-				ImGui::SetKeyboardFocusHere(0);
+				mScrollToCursor = true;
+				if (!mFindNext)
+					ImGui::SetKeyboardFocusHere(0);
 			}
+			mFindNext = false;
 		}
+		if (ImGui::IsItemActive())
+			mFindFocused = true;
+		else
+			mFindFocused = false;
 		if (mFindJustOpened) {
 			ImGui::SetKeyboardFocusHere(0);
 			mFindJustOpened = false;
@@ -1448,7 +1495,10 @@ void TextEditor::Render(const char* aTitle, const ImVec2& aSize, bool aBorder)
 			if (ImGui::InputText(("##ted_replacetb" + std::string(aTitle)).c_str(), mReplaceWord, 256, ImGuiInputTextFlags_EnterReturnsTrue))
 				shouldReplace = true;
 			ImGui::PopItemWidth();
-
+			if (ImGui::IsItemActive())
+				mReplaceFocused = true;
+			else
+				mReplaceFocused = false;
 			ImGui::SameLine();
 			if (ImGui::Button((">##replaceOne" + std::string(aTitle)).c_str()) || shouldReplace) {
 				if (strlen(mFindWord) > 0) {
@@ -1471,7 +1521,12 @@ void TextEditor::Render(const char* aTitle, const ImVec2& aSize, bool aBorder)
 							int charCount = GetLineCharacterCount((int)ln) + 1;
 							if (cindex + charCount > textLoc) {
 								curPos.mLine = (int)ln;
-								curPos.mColumn = (int)textLoc - cindex;
+								curPos.mColumn = (int)textLoc - (int)cindex;
+								auto& line = mLines[curPos.mLine];
+								for (int i = 0; i < line.size(); i++)
+									if (line[i].mChar == '\t')
+										curPos.mColumn += (mTabSize - 1);
+
 								break;
 							}
 							else // just keep adding
@@ -1485,6 +1540,7 @@ void TextEditor::Render(const char* aTitle, const ImVec2& aSize, bool aBorder)
 						DeleteSelection(); // ik there are better and more optimized ways to do this, but im lazy rn
 						InsertText(mReplaceWord);
 						SetCursorPosition(selEnd);
+						mScrollToCursor = true;
 
 						ImGui::SetKeyboardFocusHere(0);
 					}
@@ -1511,7 +1567,12 @@ void TextEditor::Render(const char* aTitle, const ImVec2& aSize, bool aBorder)
 								int charCount = GetLineCharacterCount((int)ln) + 1;
 								if (cindex + charCount > textLoc) {
 									curPos.mLine = (int)ln;
-									curPos.mColumn = (int)textLoc - cindex;
+									curPos.mColumn = (int)textLoc - (int)cindex;
+									auto& line = mLines[curPos.mLine];
+									for (int i = 0; i < line.size(); i++)
+										if (line[i].mChar == '\t')
+											curPos.mColumn += (mTabSize - 1);
+
 									break;
 								}
 								else // just keep adding
@@ -1525,6 +1586,7 @@ void TextEditor::Render(const char* aTitle, const ImVec2& aSize, bool aBorder)
 							DeleteSelection(); // ik there are better and more optimized ways to do this, but im lazy rn
 							InsertText(mReplaceWord);
 							SetCursorPosition(selEnd);
+							mScrollToCursor = true;
 
 							ImGui::SetKeyboardFocusHere(0);
 

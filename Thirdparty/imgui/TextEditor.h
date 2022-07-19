@@ -71,6 +71,7 @@ public:
 		IndentShift,				// (SHIFT+)TAB
 		Find,						// CTRL+F
 		Replace,					// CTRL+H
+		FindNext,					// F3
 		Count						// how many shortcuts are there?
 	};
 
@@ -424,6 +425,8 @@ private:
 	char mFindWord[256];
 	bool mFindOpened;
 	bool mFindJustOpened;
+	bool mFindNext;
+	bool mFindFocused, mReplaceFocused;
 	bool mReplaceOpened;
 	char mReplaceWord[256];
 
@@ -436,8 +439,6 @@ private:
 	Coordinates mACPosition;
 
 	std::vector<Shortcut> m_Shortcuts;
-	void CheckShortcuts();
-
 
 	bool mHorizontalScroll;
 	bool mCompleteBraces;
