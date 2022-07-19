@@ -73,9 +73,14 @@ TextEditor::TextEditor()
 	, mShowWhitespaces(false)
 	, mStartTime(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count())
 {
+	memset(mFindWord, 0, 256 * sizeof(char));
+	mFindOpened = false;
+	mFindJustOpened = false;
+
 	SetPalette(GetDarkPalette());
 	SetLanguageDefinition(LanguageDefinition::HLSL());
 	mLines.push_back(Line());
+
 	m_Shortcuts.resize((int)TextEditor::ShortcutID::Count);
 	//																							K1					K2			Alt			Ctrl		Shift
 	m_Shortcuts[(int)TextEditor::ShortcutID::Undo] 						= TextEditor::Shortcut(ImGuiKey_Z, 			K_NOT_USED, M_NOT_USED, M_MUST_USE, M_NOT_USED); 	// CTRL+Z
@@ -93,9 +98,9 @@ TextEditor::TextEditor()
 	m_Shortcuts[(int)TextEditor::ShortcutID::ForwardDelete] 			= TextEditor::Shortcut(ImGuiKey_Delete, 	K_NOT_USED, M_NOT_USED, M_CAN_USE, M_NOT_USED); 	// CTRL + DELETE
 	m_Shortcuts[(int)TextEditor::ShortcutID::BackwardDelete] 			= TextEditor::Shortcut(ImGuiKey_Backspace, 	K_NOT_USED, M_NOT_USED, M_CAN_USE, M_NOT_USED); 	// CTRL + BACKSPACE
 	m_Shortcuts[(int)TextEditor::ShortcutID::OverwriteCursor] 			= TextEditor::Shortcut(ImGuiKey_Insert, 	K_NOT_USED, M_NOT_USED, M_NOT_USED, M_NOT_USED); 	// INSERT
-	m_Shortcuts[(int)TextEditor::ShortcutID::Copy] 						= TextEditor::Shortcut (ImGuiKey_C, 		K_NOT_USED, M_NOT_USED, M_MUST_USE, M_NOT_USED); 	// CTRL+C
+	m_Shortcuts[(int)TextEditor::ShortcutID::Copy] 						= TextEditor::Shortcut(ImGuiKey_C, 			K_NOT_USED, M_NOT_USED, M_MUST_USE, M_NOT_USED); 	// CTRL+C
 	m_Shortcuts[(int)TextEditor::ShortcutID::Paste] 					= TextEditor::Shortcut(ImGuiKey_V, 			K_NOT_USED, M_NOT_USED, M_MUST_USE, M_NOT_USED); 	// CTRL+V
-	m_Shortcuts[(int)TextEditor::ShortcutID::Cut] 						= TextEditor::Shortcut  (ImGuiKey_X, 		K_NOT_USED, M_NOT_USED, M_MUST_USE, M_NOT_USED); 	// CTRL+X
+	m_Shortcuts[(int)TextEditor::ShortcutID::Cut] 						= TextEditor::Shortcut(ImGuiKey_X, 			K_NOT_USED, M_NOT_USED, M_MUST_USE, M_NOT_USED); 	// CTRL+X
 	m_Shortcuts[(int)TextEditor::ShortcutID::SelectAll] 				= TextEditor::Shortcut(ImGuiKey_A, 			K_NOT_USED, M_NOT_USED, M_MUST_USE, M_NOT_USED); 	// CTRL+A
 	m_Shortcuts[(int)TextEditor::ShortcutID::AutocompleteOpen] 			= TextEditor::Shortcut(ImGuiKey_Space, 		K_NOT_USED, M_NOT_USED, M_MUST_USE, M_NOT_USED); 	// CTRL+SPACE
 	m_Shortcuts[(int)TextEditor::ShortcutID::AutocompleteSelect] 		= TextEditor::Shortcut(ImGuiKey_Tab, 		K_NOT_USED, M_NOT_USED, M_NOT_USED, M_NOT_USED); 	// TAB
@@ -104,6 +109,7 @@ TextEditor::TextEditor()
 	m_Shortcuts[(int)TextEditor::ShortcutID::AutocompleteDown] 			= TextEditor::Shortcut(ImGuiKey_DownArrow, 	K_NOT_USED, M_NOT_USED, M_NOT_USED, M_CAN_USE); 	// DOWN ARROW
 	m_Shortcuts[(int)TextEditor::ShortcutID::NewLine] 					= TextEditor::Shortcut(ImGuiKey_Enter, 		K_NOT_USED, M_NOT_USED, M_NOT_USED, M_NOT_USED);	// RETURN
 	m_Shortcuts[(int)TextEditor::ShortcutID::IndentShift] 				= TextEditor::Shortcut(ImGuiKey_Tab, 		K_NOT_USED, M_NOT_USED, M_NOT_USED, M_CAN_USE); 	// TAB
+	m_Shortcuts[(int)TextEditor::ShortcutID::Find] 						= TextEditor::Shortcut(ImGuiKey_F, 			K_NOT_USED, M_NOT_USED, M_MUST_USE, M_CAN_USE); 	// TAB
 }
 
 TextEditor::~TextEditor()
@@ -154,7 +160,8 @@ std::string TextEditor::GetText(const Coordinates & aStart, const Coordinates & 
 		{
 			istart = 0;
 			++lstart;
-			result += '\n';
+			if (lstart < lend)
+				result += '\n';
 		}
 	}
 
@@ -810,6 +817,7 @@ void TextEditor::HandleKeyboardInputs()
 						case ShortcutID::IndentShift:
 							additionalChecks = !IsReadOnly() && !mACOpened;
 						break;
+						case ShortcutID::Find: mFindOpened = true; 	mFindJustOpened = true; break;
 						default: break;
 					}
 				}
@@ -1028,7 +1036,7 @@ void TextEditor::HandleMouseInputs()
 	}
 }
 
-void TextEditor::Render()
+void TextEditor::RenderInternal(const char* aTitle)
 {
 	/* Compute mCharAdvance regarding to scaled font size (Ctrl + mouse wheel)*/
 	const float fontSize = ImGui::GetFont()->CalcTextSizeA(ImGui::GetFontSize(), FLT_MAX, -1.0f, "#", nullptr, nullptr).x;
@@ -1293,7 +1301,6 @@ void TextEditor::Render()
 		// ImGui::PopFont();
 
 		ImGui::SetNextWindowPos(CoordinatesToScreenPos(acCoord), ImGuiCond_Always);
-		ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::GetStyle().Colors[ImGuiCol_WindowBg]);
 		ImGui::BeginChild("##texteditor_autocompl", ImVec2(150, 100), true);
 
 		for (int i = 0; i < mACSuggestions.size(); i++) {
@@ -1303,8 +1310,6 @@ void TextEditor::Render()
 		}
 
 		ImGui::EndChild();
-		ImGui::PopStyleColor();
-
 		// ImGui::PushFont(font);
 
 		ImGui::SetWindowFocus();
@@ -1345,6 +1350,9 @@ void TextEditor::Render(const char* aTitle, const ImVec2& aSize, bool aBorder)
 	mTextChanged = false;
 	mCursorPositionChanged = false;
 
+	ImVec2 findOrigin = ImGui::GetCursorScreenPos();
+	float windowWidth = ImGui::GetWindowWidth();
+
 	ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::ColorConvertU32ToFloat4(mPalette[(int)PaletteIndex::Background]));
 	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
 	if (!mIgnoreImGuiChild)
@@ -1360,15 +1368,80 @@ void TextEditor::Render(const char* aTitle, const ImVec2& aSize, bool aBorder)
 		HandleMouseInputs();
 
 	ColorizeInternal();
-	Render();
+	RenderInternal(aTitle);
+
+	/* FIND TEXT WINDOW */
+	if (mFindOpened)
+	{
+		// ImFont* font = ImGui::GetFont();
+		// ImGui::PopFont();
+
+		ImVec4 bgc = ImGui::GetStyle().Colors[ImGuiCol_WindowBg];
+
+		ImGui::SetNextWindowPos(ImVec2(findOrigin.x + windowWidth - 250, findOrigin.y), ImGuiCond_Always);
+		ImGui::BeginChild(("##ted_findwnd" + std::string(aTitle)).c_str(), ImVec2(200, 40), true);
+
+		ImGui::PushItemWidth(-15);
+		if (ImGui::InputText(("##ted_findtextbox" + std::string(aTitle)).c_str(), mFindWord, 256, ImGuiInputTextFlags_EnterReturnsTrue)) {
+			auto curPos = mState.mCursorPosition;
+			size_t cindex = 0;
+			for (size_t ln = 0; ln < curPos.mLine; ln++)
+				cindex += (int)GetLineCharacterCount(ln) + 1;
+			cindex += curPos.mColumn;
+
+			std::string textSrc = GetText();
+			size_t textLoc = textSrc.find(mFindWord, cindex);
+			if (textLoc == std::string::npos)
+				textLoc = textSrc.find(mFindWord, 0);
+
+
+			if (textLoc != std::string::npos) {
+				curPos.mLine = curPos.mColumn = 0;
+				cindex = 0;
+				for (size_t ln = 0; ln < mLines.size(); ln++) {
+					int charCount = GetLineCharacterCount((int)ln) + 1;
+					if (cindex + charCount > textLoc) {
+						curPos.mLine = (int)ln;
+						curPos.mColumn = (int)textLoc - (int)cindex;
+						break;
+					}
+					else // just keep adding
+						cindex += charCount;
+				}
+
+
+				auto selStart = curPos, selEnd = curPos;
+				selEnd.mColumn += (int)strlen(mFindWord);
+				SetSelection(curPos, selEnd);
+				SetCursorPosition(selEnd);
+
+				ImGui::SetKeyboardFocusHere(0);
+			}
+		}
+		if (mFindJustOpened) {
+			ImGui::SetKeyboardFocusHere(0);
+			mFindJustOpened = false;
+		}
+		ImGui::PopItemWidth();
+		ImGui::SameLine();
+		if (ImGui::Button(("X##" + std::string(aTitle)).c_str()))
+			mFindOpened = false;
+
+		ImGui::EndChild();
+
+		// ImGui::PushFont(font);
+
+		if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Escape)))
+			mFindOpened = false;
+	}
 
 	if (mHandleKeyboardInputs)
 		ImGui::PopAllowKeyboardFocus();
 
 	if (!mIgnoreImGuiChild)
 		ImGui::EndChild();
-	ImGui::PopStyleVar();
 	ImGui::PopStyleColor();
+	ImGui::PopStyleVar();
 
 	mWithinRender = false;
 }

@@ -69,6 +69,7 @@ public:
 		AutocompleteDown,			// DOWN ARROW
 		NewLine,					// ENTER
 		IndentShift,				// (SHIFT+)TAB
+		Find,						// CTRL+F
 		Count						// how many shortcuts are there?
 	};
 
@@ -324,7 +325,7 @@ public:
 	inline void SetSmartPredictions(bool s) { mAutocomplete = s; }
 	void SetShortcut(TextEditor::ShortcutID id, Shortcut s);
 
-	inline void SetShowLineNumbers(bool s) { mShowLineNumbers = s; mTextStart = s ? 20.0f : 6.0f; mLeftMargin = s ? 10.0f : -20.0f; }
+	inline void SetShowLineNumbers(bool s) { mShowLineNumbers = s; mTextStart = s ? 20.0f : 6.0f; mLeftMargin = s ? 10 : -20; }
 	inline int GetTextStart() const { return mShowLineNumbers ? 7 : 3; }
 
 	static const Palette& GetDarkPalette();
@@ -411,12 +412,17 @@ private:
 
 	void HandleKeyboardInputs();
 	void HandleMouseInputs();
-	void Render();
+	void RenderInternal(const char* aTitle);
+
 	float mLineSpacing;
 	Lines mLines;
 	EditorState mState;
 	UndoBuffer mUndoBuffer;
 	int mUndoIndex;
+
+	char mFindWord[256];
+	bool mFindOpened;
+	bool mFindJustOpened;
 
 	bool mAutocomplete;
 	std::string mACWord;
