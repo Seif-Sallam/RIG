@@ -4838,28 +4838,104 @@ inline static void RISCVDocumentation(TextEditor::Identifiers& identifiers)
 	identifiers[".end_macro"] = TextEditor::Identifier("A directive to end the definition of the macro. See \'.macro\'");
 }
 
+
 const TextEditor::LanguageDefinition& TextEditor::LanguageDefinition::RISCV()
 {
 	static bool inited = false;
 	static LanguageDefinition langDef;
 	if (!inited) {
-
 		static std::vector<std::string> keywords = {
 			"ADD","SUB","XOR","OR","AND","SLL","SRL","SLT","SLTU","ADDI","XORI","ORI","ANDI","SLLI","SRLI","SRAI","SLTI",
 			"SLTIU","LB","LH","LW","LBU","LHU","SB","SH","SW","BEQ","BNE","BLT","BGE","BLTU","BGEU","JAL","JALR","LUI","AUIPC",
 			"ECALL","EBREAK"
 		};
 
-		RISCVDocumentation(langDef.mIdentifiers);
+		size_t size = keywords.size();
+		for(size_t i = 0; i < size; i++)
+		{
+			std::string lowerString;
+			for(auto& c : keywords[i])
+				lowerString += tolower(c);
 
+			keywords.push_back(lowerString);
+		}
+		std::sort(keywords.begin(), keywords.end(), [](std::string& str1, std::string& str2){return str1.size() > str2.size();});
 
-		langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("L?\\\"(\\\\.|[^\\\"])*\\\"", PaletteIndex::String));
-		langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("L?\\\'(\\\\.|[^\\\"])*\\\'", PaletteIndex::String));
-		langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("\\.[a-zA-Z_]+", PaletteIndex::Identifier));
-		langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+)([eE][+-]?[0-9]+)?[fF]?", PaletteIndex::Number));
-		langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[+-]?[0-9]+[Uu]?[lL]?[lL]?", PaletteIndex::Number));
-		langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("0[0-7]+[Uu]?[lL]?[lL]?", PaletteIndex::Number));
-		langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("0[xX][0-9a-fA-F]+[uU]?[lL]?[lL]?", PaletteIndex::Number));
+		static Identifiers identifiers;
+		RISCVDocumentation(identifiers);
+
+		langDef.mIdentifiers = identifiers;
+
+		langDef.mTokenize = [](const char* in_begin, const char* in_end, const char*& out_begin, const char*& out_end, PaletteIndex & paletteIndex) -> bool
+		{
+			static auto tokenizeRiscKeyword = [](const char* in_begin, const char* in_end, const char*& out_begin, const char*&out_end)
+			{
+				size_t size = in_end - in_begin;
+				for(auto& word : keywords)
+				{
+					if(word.size() > size)
+						continue;
+					if(strncmp(word.c_str(), in_begin, std::min(word.size(), size)) == 0)
+					{
+						out_begin = in_begin;
+						out_end = in_begin + std::min(word.size(), size);
+						return true;
+					}
+				}
+				return false;
+			};
+
+			static auto tokenizeRiscIdentifier = [](const char* in_begin, const char* in_end, const char*& out_begin, const char*&out_end)
+			{
+				size_t size = in_end - in_begin;
+				for(auto& [name, identifier] : identifiers)
+				{
+					if(name.size() > size)
+						continue;
+					if(strncmp(name.c_str(), in_begin, std::min(name.size(), size)) == 0)
+					{
+						out_begin = in_begin;
+						out_end = in_begin + std::min(name.size(), size);
+						return true;
+					}
+				}
+				return false;
+			};
+
+			paletteIndex = PaletteIndex::Max;
+
+			while (in_begin < in_end && isascii(*in_begin) && isblank(*in_begin))
+				in_begin++;
+
+			if (in_begin == in_end)
+			{
+				out_begin = in_end;
+				out_end = in_end;
+				paletteIndex = PaletteIndex::Default;
+			}
+			else if (TokenizeCStyleString(in_begin, in_end, out_begin, out_end))
+				paletteIndex = PaletteIndex::String;
+			else if (TokenizeCStyleCharacterLiteral(in_begin, in_end, out_begin, out_end))
+				paletteIndex = PaletteIndex::CharLiteral;
+			else if (tokenizeRiscIdentifier(in_begin, in_end, out_begin, out_end))
+					paletteIndex = PaletteIndex::Identifier;
+			else if (tokenizeRiscKeyword(in_begin, in_end, out_begin, out_end))
+					paletteIndex = PaletteIndex::Keyword;
+			else if (TokenizeCStyleNumber(in_begin, in_end, out_begin, out_end))
+				paletteIndex = PaletteIndex::Number;
+			else if (TokenizeCStylePunctuation(in_begin, in_end, out_begin, out_end))
+				paletteIndex = PaletteIndex::Punctuation;
+
+			return paletteIndex != PaletteIndex::Max;
+		};
+
+		// langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("L?\\\"(\\\\.|[^\\\"])*\\\"", PaletteIndex::String));
+		// langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("L?\\\'(\\\\.|[^\\\"])*\\\'", PaletteIndex::String));
+		// langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("\\.[a-zA-Z_]+", PaletteIndex::Identifier));
+		// langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+)([eE][+-]?[0-9]+)?[fF]?", PaletteIndex::Number));
+		// langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[+-]?[0-9]+[Uu]?[lL]?[lL]?", PaletteIndex::Number));
+		// langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("0[0-7]+[Uu]?[lL]?[lL]?", PaletteIndex::Number));
+		// langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("0[xX][0-9a-fA-F]+[uU]?[lL]?[lL]?", PaletteIndex::Number));
 
 		langDef.mCommentStart = "#";
 		langDef.mCommentEnd = "";
