@@ -593,12 +593,12 @@ void TextEditor::HandleKeyboardInputs()
 				case ShortcutID::MoveStartLine: MoveHome(shift); break;
 				case ShortcutID::ForwardDelete:
 					if (ctrl)
-						MoveRight(1, true, true);
+						MoveRight(1, true, true, true);
 					Delete();
 				break;
 				case ShortcutID::BackwardDelete:
 					if (ctrl)
-						MoveLeft(1, true, true);
+						MoveLeft(1, true, true, true);
 					BackSpace();
 				break;
 				case ShortcutID::OverwriteCursor: mOverwrite ^= true; break;
@@ -1442,7 +1442,7 @@ void TextEditor::MoveDown(int aAmount, bool aSelect)
 	}
 }
 
-void TextEditor::MoveLeft(int aAmount, bool aSelect, bool aWordMode)
+void TextEditor::MoveLeft(int aAmount, bool aSelect, bool aWordMode, bool aDelete)
 {
 	if (mLines.empty())
 		return;
@@ -1471,10 +1471,12 @@ void TextEditor::MoveLeft(int aAmount, bool aSelect, bool aWordMode)
 	assert(mState.mCursorPosition.mColumn >= 0);
 	if (aSelect)
 	{
-		if (oldPos == mInteractiveStart)
+		if (oldPos == mInteractiveStart) {
+			if (aDelete) mInteractiveEnd = mInteractiveStart;
 			mInteractiveStart = mState.mCursorPosition;
+		}
 		else if (oldPos == mInteractiveEnd)
-			mInteractiveEnd = mState.mCursorPosition;
+			mInteractiveEnd = oldPos;
 		else
 		{
 			mInteractiveStart = mState.mCursorPosition;
@@ -1483,12 +1485,12 @@ void TextEditor::MoveLeft(int aAmount, bool aSelect, bool aWordMode)
 	}
 	else
 		mInteractiveStart = mInteractiveEnd = mState.mCursorPosition;
-	SetSelection(mInteractiveStart, mInteractiveEnd, aSelect && aWordMode ? SelectionMode::Word : SelectionMode::Normal);
+	SetSelection(mInteractiveStart, mInteractiveEnd, SelectionMode::Normal);
 
 	EnsureCursorVisible();
 }
 
-void TextEditor::MoveRight(int aAmount, bool aSelect, bool aWordMode)
+void TextEditor::MoveRight(int aAmount, bool aSelect, bool aWordMode, bool aDelete)
 {
 	auto oldPos = mState.mCursorPosition;
 
@@ -1516,8 +1518,10 @@ void TextEditor::MoveRight(int aAmount, bool aSelect, bool aWordMode)
 
 	if (aSelect)
 	{
-		if (oldPos == mInteractiveEnd)
+		if (oldPos == mInteractiveEnd) {
+			if (aDelete) mInteractiveStart = mInteractiveEnd;
 			mInteractiveEnd = SanitizeCoordinates(mState.mCursorPosition);
+		}
 		else if (oldPos == mInteractiveStart)
 			mInteractiveStart = mState.mCursorPosition;
 		else
@@ -1528,7 +1532,7 @@ void TextEditor::MoveRight(int aAmount, bool aSelect, bool aWordMode)
 	}
 	else
 		mInteractiveStart = mInteractiveEnd = mState.mCursorPosition;
-	SetSelection(mInteractiveStart, mInteractiveEnd, aSelect && aWordMode ? SelectionMode::Word : SelectionMode::Normal);
+	SetSelection(mInteractiveStart, mInteractiveEnd, SelectionMode::Normal);
 
 	EnsureCursorVisible();
 }
