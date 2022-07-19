@@ -1123,11 +1123,11 @@ void TextEditor::Render()
 				if (ImGui::IsMouseHoveringRect(lineStartScreenPos, end))
 				{
 					ImGui::BeginTooltip();
-					ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.2f, 0.2f, 1.0f));
+					ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(mPalette[(int)PaletteIndex::ErrorMessage]));
 					ImGui::Text("Error at line %d:", errorIt->first);
 					ImGui::PopStyleColor();
 					ImGui::Separator();
-					ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 0.2f, 1.0f));
+					ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(mPalette[(int)PaletteIndex::ErrorMessage]));
 					ImGui::Text("%s", errorIt->second.c_str());
 					ImGui::PopStyleColor();
 					ImGui::EndTooltip();
@@ -1348,7 +1348,7 @@ void TextEditor::Render(const char* aTitle, const ImVec2& aSize, bool aBorder)
 	ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::ColorConvertU32ToFloat4(mPalette[(int)PaletteIndex::Background]));
 	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
 	if (!mIgnoreImGuiChild)
-		ImGui::BeginChild(aTitle, aSize, aBorder, ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_AlwaysHorizontalScrollbar | ImGuiWindowFlags_NoMove);
+		ImGui::BeginChild(aTitle, aSize, aBorder, (ImGuiWindowFlags_AlwaysHorizontalScrollbar * mHorizontalScroll) | ImGuiWindowFlags_NoMove);
 
 	if (mHandleKeyboardInputs)
 	{
@@ -1490,7 +1490,11 @@ void TextEditor::EnterCharacter(ImWchar aChar, bool aShift)
 				}
 				else
 				{
-					line.insert(line.begin(), Glyph('\t', TextEditor::PaletteIndex::Background));
+					if (mInsertSpaces) {
+						for (int i = 0; i < mTabSize; i++)
+							line.insert(line.begin(), Glyph(' ', TextEditor::PaletteIndex::Background));
+					} else
+						line.insert(line.begin(), Glyph('\t', TextEditor::PaletteIndex::Background));
 					modified = true;
 				}
 			}
@@ -1565,7 +1569,13 @@ void TextEditor::EnterCharacter(ImWchar aChar, bool aShift)
 		int e = ImTextCharToUtf8(buf, 7, aChar);
 		if (e > 0)
 		{
+			if (mInsertSpaces && e == 1 && buf[0] == '\t') {
+				for (int i = 0; i < mTabSize; i++)
+					buf[i] = ' ';
+				e = mTabSize;
+			}
 			buf[e] = '\0';
+
 			auto& line = mLines[coord.mLine];
 			auto cindex = GetCharacterIndex(coord);
 
@@ -1832,6 +1842,8 @@ void TextEditor::MoveLeft(int aAmount, bool aSelect, bool aWordMode)
 	assert(mState.mCursorPosition.mColumn >= 0);
 	if (aSelect)
 	{
+		mInteractiveStart = mState.mSelectionStart;
+		mInteractiveEnd = mState.mSelectionEnd;
 		if (oldPos == mInteractiveStart)
 			mInteractiveStart = mState.mCursorPosition;
 		else if (oldPos == mInteractiveEnd)
@@ -1844,7 +1856,7 @@ void TextEditor::MoveLeft(int aAmount, bool aSelect, bool aWordMode)
 	}
 	else
 		mInteractiveStart = mInteractiveEnd = mState.mCursorPosition;
-	SetSelection(mInteractiveStart, mInteractiveEnd, aSelect && aWordMode ? SelectionMode::Word : SelectionMode::Normal);
+	SetSelection(mInteractiveStart, mInteractiveEnd, SelectionMode::Normal);
 
 	EnsureCursorVisible();
 }
@@ -1886,6 +1898,9 @@ void TextEditor::MoveRight(int aAmount, bool aSelect, bool aWordMode)
 
 	if (aSelect)
 	{
+		mInteractiveStart = mState.mSelectionStart;
+		mInteractiveEnd = mState.mSelectionEnd;
+
 		if (oldPos == mInteractiveEnd)
 			mInteractiveEnd = mState.mCursorPosition;
 		else if (oldPos == mInteractiveStart)
@@ -1898,7 +1913,7 @@ void TextEditor::MoveRight(int aAmount, bool aSelect, bool aWordMode)
 	}
 	else
 		mInteractiveStart = mInteractiveEnd = mState.mCursorPosition;
-	SetSelection(mInteractiveStart, mInteractiveEnd, aSelect && aWordMode ? SelectionMode::Word : SelectionMode::Normal);
+	SetSelection(mInteractiveStart, mInteractiveEnd, SelectionMode::Normal);
 
 	EnsureCursorVisible();
 }
@@ -2274,6 +2289,7 @@ const TextEditor::Palette & TextEditor::GetDarkPalette()
 		0x40000000, // Current line fill
 		0x40808080, // Current line fill (inactive)
 		0x40a0a0a0, // Current line edge
+		0xff33ffff, // Error message
 	} };
 	return p;
 }
@@ -2302,6 +2318,7 @@ const TextEditor::Palette & TextEditor::GetLightPalette()
 		0x40000000, // Current line fill
 		0x40808080, // Current line fill (inactive)
 		0x40000000, // Current line edge
+		0xff3333ff, // Error message
 	} };
 	return p;
 }
@@ -2330,6 +2347,7 @@ const TextEditor::Palette & TextEditor::GetRetroBluePalette()
 		0x40000000, // Current line fill
 		0x40808080, // Current line fill (inactive)
 		0x40000000, // Current line edge
+		0xffffff00, // Error message
 	} };
 	return p;
 }
