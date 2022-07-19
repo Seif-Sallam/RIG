@@ -1587,7 +1587,7 @@ void TextEditor::RenderInternal(const char* aTitle)
 
 			// side bar bg
 			if (mSidebar) {
-				drawList->AddRectFilled(ImVec2(lineStartScreenPos.x + scrollX, lineStartScreenPos.y), ImVec2(lineStartScreenPos.x + scrollX + mTextStart - 5.0f, lineStartScreenPos.y + mCharAdvance.y), ImGui::GetColorU32(ImGuiCol_WindowBg));
+				drawList->AddRectFilled(ImVec2(lineStartScreenPos.x + scrollX, lineStartScreenPos.y), ImVec2(lineStartScreenPos.x + scrollX + mTextStart - 5.0f, lineStartScreenPos.y + mCharAdvance.y + 2), ImGui::GetColorU32(ImGuiCol_WindowBg));
 
 				// Draw breakpoints
 				if (HasBreakpoint(lineNo + 1) != 0) {
@@ -4817,6 +4817,64 @@ const TextEditor::LanguageDefinition& TextEditor::LanguageDefinition::SPIRV()
 	}
 	return langDef;
 }
+
+inline static void RISC_VDocumentation(TextEditor::Identifiers& identifiers)
+{
+	identifiers[".data"] = TextEditor::Identifier("The start of the data section. There can only be one data section per program");
+	identifiers[".text"] = TextEditor::Identifier("The start of the text section. There can only be one text section per program");
+	identifiers[".word"] = TextEditor::Identifier("A directive for declaring a 4-byte memory space to hold an intger or an array of it.\ne.g.:\n\tlabel: .word 10 [0b110, 0x15 1 4, 14]\nYou can mix space and comma seperation. Every thing inside the [] is optional");
+	identifiers[".half"] = TextEditor::Identifier("A directive for declaring a 2-byte memory space to hold an intger or an array of it.\ne.g.:\n\tlabel: .half 10 [14, 5 1 4, 14]\nYou can mix space and comma seperation. Every thing inside the [] is optional");
+	identifiers[".byte"] = TextEditor::Identifier("A directive for declaring a 1-byte memory space to hold an intger or an array of it.\ne.g.:\n\tlabel: .byte 10 [14, 5 1 4, 14]\nYou can mix space and comma seperation. Every thing inside the [] is optional");
+	identifiers[".space"] = TextEditor::Identifier("A directive for adding an empty space in the memory.\ne.g.:\n\tlabel: .space 1314\nThis reserves 1314 bytes in memory and puts the address in the label.");
+	identifiers[".ascii"] = TextEditor::Identifier("A directive to add a string that is NOT null terminated. This acts just like an array of characters (should NOT be printed)\ne.g.:\n\tlabel: .ascii \"String To Store Characters in\"\nThe available escape characters are the same as in C.");
+	identifiers[".asciz"] = TextEditor::Identifier("A directvie to add a null terminated string (a C-String). This string can be printed.\ne.g.:\n\tlabel: .asciz \"String to be Printed\"\nYou can use single quotes or double quotes");
+	identifiers[".string"] = TextEditor::Identifier("This is just an alias for .asciz");
+	identifiers[".float"] = TextEditor::Identifier("A directive for declaring a 4-byte memory space to hold a single precision floating point number or an array of it.\ne.g.:\n\tlabel: .word 10.15 [0b110.101, 0x15.35 1.126 4.135, 14]\nYou can mix space and comma seperation. Every thing inside the [] is optional");
+	identifiers[".double"] = TextEditor::Identifier("A directive for declaring an 8-byte memory space to hold a double precision floating point number or an array of it.\ne.g.:\n\tlabel: .word 10.15 [0b110.101, 0x15.35 1.126 4.135, 14]\nYou can mix space and comma seperation. Every thing inside the [] is optional");
+	identifiers[".eqv"] = TextEditor::Identifier("A directive to define an qeuivilent statement to another statement. It acts the same as #define in C.\nThis is a preprocessor, therefore its value will be evaulated before assembly");
+	identifiers[".macro"] = TextEditor::Identifier("A directive to define a macro to easily use it around your code\ne.g.:\n\t.macro ADDTO(x)\n\taddi @x, x0, 10\n\t.end_macro\n\t.text\n\tADDTO(x4) #expands to addi x4, x0, 10");
+	identifiers[".end_macro"] = TextEditor::Identifier("A directive to end the definition of the macro. See \'.macro\'");
+}
+
+const TextEditor::LanguageDefinition& TextEditor::LanguageDefinition::RISCV()
+{
+	static bool inited = false;
+	static LanguageDefinition langDef;
+	if (!inited) {
+
+		static std::vector<const char*> keywords = {
+			"ADD","SUB","XOR","OR","AND","SLL","SRL","SLT","SLTU","ADDI","XORI","ORI","ANDI","SLLI","SRLI","SRAI","SLTI",
+			"SLTIU","LB","LH","LW","LBU","LHU","SB","SH","SW","BEQ","BNE","BLT","BGE","BLTU","BGEU","JAL","JALR","LUI","AUIPC",
+			"ECALL","EBREAK"
+		};
+		for(auto& w : keywords)
+		{
+			langDef.mKeywords.insert(w);
+		}
+		RISC_VDocumentation(langDef.mIdentifiers);
+
+		langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("L?\\\"(\\\\.|[^\\\"])*\\\"", PaletteIndex::String));
+		langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[ =\\t]Op[a-zA-Z]*", PaletteIndex::Keyword));
+		langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("%[_a-zA-Z0-9]*", PaletteIndex::Identifier));
+		langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+)([eE][+-]?[0-9]+)?[fF]?", PaletteIndex::Number));
+		langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[+-]?[0-9]+[Uu]?[lL]?[lL]?", PaletteIndex::Number));
+		langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("0[0-7]+[Uu]?[lL]?[lL]?", PaletteIndex::Number));
+		langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("0[xX][0-9a-fA-F]+[uU]?[lL]?[lL]?", PaletteIndex::Number));
+
+		langDef.mCommentStart = "#";
+		langDef.mCommentEnd = "";
+		langDef.mSingleLineComment = "#";
+
+		langDef.mCaseSensitive = false;
+		langDef.mAutoIndentation = true;
+
+		langDef.mName = "RISC-V";
+
+		inited = true;
+	}
+	return langDef;
+}
+
 
 const TextEditor::LanguageDefinition& TextEditor::LanguageDefinition::C()
 {

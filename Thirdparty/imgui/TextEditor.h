@@ -285,6 +285,7 @@ public:
 		static const LanguageDefinition& HLSL();
 		static const LanguageDefinition& GLSL();
 		static const LanguageDefinition& SPIRV();
+		static const LanguageDefinition& RISCV();
 		static const LanguageDefinition& C();
 		static const LanguageDefinition& SQL();
 		static const LanguageDefinition& AngelScript();
