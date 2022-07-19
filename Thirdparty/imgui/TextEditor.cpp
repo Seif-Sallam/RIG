@@ -683,7 +683,7 @@ void TextEditor::HandleKeyboardInputs()
 					EnterCharacter('\t', shift);
 				break;
 			}
-		} else if (!IsReadOnly() && !ctrl && !alt) {
+		} else if (!IsReadOnly()) {
 			for (int i = 0; i < io.InputQueueCharacters.Size; i++)
 			{
 				auto c = (unsigned char)io.InputQueueCharacters[i];
