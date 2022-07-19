@@ -244,6 +244,7 @@ public:
 	void MoveBottom(bool aSelect = false);
 	void MoveHome(bool aSelect = false);
 	void MoveEnd(bool aSelect = false);
+	void MoveToEndOfWord(int aAmount, bool right, bool aSelect = false);
 
 	void SetSelectionStart(const Coordinates &aPosition);
 	void SetSelectionEnd(const Coordinates &aPosition);

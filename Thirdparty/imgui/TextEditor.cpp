@@ -716,10 +716,14 @@ void TextEditor::HandleKeyboardInputs()
 			MoveUp(1, shift);
 		else if (!ctrl && !alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_DownArrow)))
 			MoveDown(1, shift);
+		else if (!alt && ctrl && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_LeftArrow)))
+			MoveToEndOfWord(1, false, shift);
 		else if (!alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_LeftArrow)))
 			MoveLeft(1, shift, ctrl);
-		else if (!alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_RightArrow)))
-			MoveRight(1, shift, ctrl);
+		else if (!alt && ctrl && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_RightArrow)))
+			MoveToEndOfWord(1, true, shift);
+		else if (!alt && !ctrl && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_RightArrow)))
+			MoveRight(1, shift);
 		else if (!alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_PageUp)))
 			MoveUp(GetPageSize() - 4, shift);
 		else if (!alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_PageDown)))
@@ -736,7 +740,8 @@ void TextEditor::HandleKeyboardInputs()
 			Delete();
 		else if (!IsReadOnly() && ctrl && !shift && !alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Delete)))
 		{
-			MoveRight(1, true, true);
+			// MoveRight(1, true, true);
+			MoveToEndOfWord(1, true, true);
 			Delete();
 		}
 		else if (!IsReadOnly() && !ctrl && shift && !alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Delete)))
@@ -749,7 +754,8 @@ void TextEditor::HandleKeyboardInputs()
 			Backspace();
 		else if (!IsReadOnly() && ctrl && !shift && !alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Backspace)))
 		{
-			MoveLeft(1, true, true);
+			// MoveLeft(1, true, true);
+			MoveToEndOfWord(1, false, true);
 			Backspace();
 		}
 		else if (!IsReadOnly() && !ctrl && shift && !alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Backspace)))
@@ -1637,6 +1643,84 @@ void TextEditor::MoveLeft(int aAmount, bool aSelect, bool aWordMode)
 	SetSelection(mInteractiveStart, mInteractiveEnd, aSelect && aWordMode ? SelectionMode::Word : SelectionMode::Normal);
 
 	EnsureCursorVisible();
+}
+
+void TextEditor::MoveToEndOfWord(int aAmount, bool right, bool aSelect)
+{
+	auto oldPos = mState.mCursorPosition;
+	if (mLines.empty() || oldPos.mLine >= mLines.size())
+		return;
+	auto cIndex = GetCharacterIndex(oldPos);
+	auto lineIndex = mState.mCursorPosition.mLine;
+	auto &line = mLines[lineIndex];
+	if (cIndex >= line.size())
+		return;
+
+	cIndex--;
+	if (cIndex < 0)
+		return;
+	int32_t endIndex = 0;
+	int32_t startIndex = cIndex;
+	bool foundACharacter = false;
+	// while (foundACharacter == false)
+	// {
+	// 	if (right)
+	// 	{
+	// 		if (cIndex < line.size())
+	// 		{
+	// 			if (!isblank(line[cIndex]))
+	// 			{
+	// 				foundACharacter = true;
+	// 			}
+	// 			else
+	// 				cIndex++;
+	// 		}
+	// 		else
+	// 			break;
+	// 	}
+	// 	else
+	// 	{
+	// 		if (cIndex >= 0)
+	// 		{
+	// 			if (!isblank(line[cIndex]))
+	// 				foundACharacter = true;
+	// 			else
+	// 				cIndex--;
+	// 		}
+	// 		else
+	// 			break;
+	// 	}
+	// }
+	while (aAmount != 0)
+	{
+		if (right)
+		{
+			while (cIndex < line.size() && !isblank(line[cIndex]))
+				cIndex++;
+			if (cIndex >= line.size())
+				aAmount = 0;
+			else
+				aAmount--;
+			endIndex = cIndex + 1;
+		}
+		else
+		{
+			while (cIndex >= 0 && !isblank(line[cIndex]))
+				cIndex--;
+			if (cIndex < 0)
+				aAmount = 0;
+			else
+				aAmount--;
+			endIndex = std::max(0, cIndex);
+		}
+	}
+
+	Coordinates startCoords(oldPos.mLine, GetCharacterColumn(oldPos.mLine, startIndex));
+	Coordinates endCoords(oldPos.mLine, GetCharacterColumn(oldPos.mLine, endIndex));
+
+	if (aSelect)
+		SetSelection(startCoords, endCoords, SelectionMode::Normal);
+	SetCursorPosition(endCoords);
 }
 
 void TextEditor::MoveRight(int aAmount, bool aSelect, bool aWordMode)
