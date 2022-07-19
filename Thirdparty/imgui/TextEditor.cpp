@@ -192,7 +192,9 @@ void TextEditor::SetLanguageDefinition(const LanguageDefinition & aLanguageDef)
 
 void TextEditor::SetPalette(const Palette & aValue)
 {
-	mPaletteBase = aValue;
+	for(int i = 0; i < aValue.size(); i++)
+		mPaletteBase[i] = aValue[i];
+
 }
 
 std::string TextEditor::GetText(const Coordinates & aStart, const Coordinates & aEnd) const
@@ -4818,10 +4820,10 @@ const TextEditor::LanguageDefinition& TextEditor::LanguageDefinition::SPIRV()
 	return langDef;
 }
 
-inline static void RISC_VDocumentation(TextEditor::Identifiers& identifiers)
+inline static void RISCVDocumentation(TextEditor::Identifiers& identifiers)
 {
-	identifiers[".data"] = TextEditor::Identifier("The start of the data section. There can only be one data section per program");
-	identifiers[".text"] = TextEditor::Identifier("The start of the text section. There can only be one text section per program");
+	identifiers[".data"] = TextEditor::Identifier("The start of the data section. There can only be one data section per program.");
+	identifiers[".text"] = TextEditor::Identifier("The start of the text section. There can only be one text section per program.");
 	identifiers[".word"] = TextEditor::Identifier("A directive for declaring a 4-byte memory space to hold an intger or an array of it.\ne.g.:\n\tlabel: .word 10 [0b110, 0x15 1 4, 14]\nYou can mix space and comma seperation. Every thing inside the [] is optional");
 	identifiers[".half"] = TextEditor::Identifier("A directive for declaring a 2-byte memory space to hold an intger or an array of it.\ne.g.:\n\tlabel: .half 10 [14, 5 1 4, 14]\nYou can mix space and comma seperation. Every thing inside the [] is optional");
 	identifiers[".byte"] = TextEditor::Identifier("A directive for declaring a 1-byte memory space to hold an intger or an array of it.\ne.g.:\n\tlabel: .byte 10 [14, 5 1 4, 14]\nYou can mix space and comma seperation. Every thing inside the [] is optional");
@@ -4842,20 +4844,18 @@ const TextEditor::LanguageDefinition& TextEditor::LanguageDefinition::RISCV()
 	static LanguageDefinition langDef;
 	if (!inited) {
 
-		static std::vector<const char*> keywords = {
+		static std::vector<std::string> keywords = {
 			"ADD","SUB","XOR","OR","AND","SLL","SRL","SLT","SLTU","ADDI","XORI","ORI","ANDI","SLLI","SRLI","SRAI","SLTI",
 			"SLTIU","LB","LH","LW","LBU","LHU","SB","SH","SW","BEQ","BNE","BLT","BGE","BLTU","BGEU","JAL","JALR","LUI","AUIPC",
 			"ECALL","EBREAK"
 		};
-		for(auto& w : keywords)
-		{
-			langDef.mKeywords.insert(w);
-		}
-		RISC_VDocumentation(langDef.mIdentifiers);
+
+		RISCVDocumentation(langDef.mIdentifiers);
+
 
 		langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("L?\\\"(\\\\.|[^\\\"])*\\\"", PaletteIndex::String));
-		langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[ =\\t]Op[a-zA-Z]*", PaletteIndex::Keyword));
-		langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("%[_a-zA-Z0-9]*", PaletteIndex::Identifier));
+		langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("L?\\\'(\\\\.|[^\\\"])*\\\'", PaletteIndex::String));
+		langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("\\.[a-zA-Z_]+", PaletteIndex::Identifier));
 		langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+)([eE][+-]?[0-9]+)?[fF]?", PaletteIndex::Number));
 		langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[+-]?[0-9]+[Uu]?[lL]?[lL]?", PaletteIndex::Number));
 		langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("0[0-7]+[Uu]?[lL]?[lL]?", PaletteIndex::Number));
