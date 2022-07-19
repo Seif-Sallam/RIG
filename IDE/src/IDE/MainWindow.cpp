@@ -27,7 +27,7 @@ namespace IDE
 		: m_TextEditorWindowName("Text Editors"), m_LogWindowName("Log"), m_RegisterFileWindowName("Register File")
 	{
 		InitilizeWindow();
-		auto lang = TextEditor::LanguageDefinition::CPlusPlus();
+		auto lang = TextEditor::LanguageDefinition::HLSL();
 
 		m_TextEditor.SetLanguageDefinition(lang);
 		std::string str = "TEXT\n";

@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <functional>
 #include <chrono>
 #include <string>
 #include <regex>
@@ -6,15 +7,14 @@
 
 #include "TextEditor.h"
 
-#define IMGUI_DEFINE_MATH_OPERATORS
-#include "imgui.h" // for imGui::GetCurrentWindow()
-
 // TODO
 // - multiline comments vs single-line: latter is blocking start of a ML
+// - handle unicode/utf
+// - testing
 
-template <class InputIt1, class InputIt2, class BinaryPredicate>
+template<class InputIt1, class InputIt2, class BinaryPredicate>
 bool equals(InputIt1 first1, InputIt1 last1,
-			InputIt2 first2, InputIt2 last2, BinaryPredicate p)
+	InputIt2 first2, InputIt2 last2, BinaryPredicate p)
 {
 	for (; first1 != last1 && first2 != last2; ++first1, ++first2)
 	{
@@ -25,7 +25,30 @@ bool equals(InputIt1 first1, InputIt1 last1,
 }
 
 TextEditor::TextEditor()
-	: mLineSpacing(1.0f), mUndoIndex(0), mTabSize(4), mOverwrite(false), mReadOnly(false), mWithinRender(false), mScrollToCursor(false), mScrollToTop(false), mTextChanged(false), mColorizerEnabled(true), mTextStart(20.0f), mLeftMargin(10), mCursorPositionChanged(false), mColorRangeMin(0), mColorRangeMax(0), mSelectionMode(SelectionMode::Normal), mCheckComments(true), mLastClick(-1.0f), mHandleKeyboardInputs(true), mHandleMouseInputs(true), mIgnoreImGuiChild(false), mShowWhitespaces(true), mShowShortTabGlyphs(false), mStartTime(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count())
+	: mLineSpacing(1.0f)
+	, mUndoIndex(0)
+	, mInsertSpaces(false)
+	, mTabSize(4)
+	, mAutocomplete(true)
+	, mACOpened(false)
+	, mHighlightLine(true)
+	, mHorizontalScroll(true)
+	, mCompleteBraces(true)
+	, mShowLineNumbers(true)
+	, mSmartIndent(true)
+	, mOverwrite(false)
+	, mReadOnly(false)
+	, mWithinRender(false)
+	, mScrollToCursor(false)
+	, mScrollToTop(false)
+	, mTextChanged(false)
+	, mTextStart(20.0f)
+	, mLeftMargin(10)
+	, mColorRangeMin(0)
+	, mColorRangeMax(0)
+	, mSelectionMode(SelectionMode::Normal)
+	, mCheckComments(true)
+	, mLastClick(-1.0f)
 {
 	SetPalette(GetDarkPalette());
 	SetLanguageDefinition(LanguageDefinition::HLSL());
@@ -36,54 +59,54 @@ TextEditor::~TextEditor()
 {
 }
 
-void TextEditor::SetLanguageDefinition(const LanguageDefinition &aLanguageDef)
+void TextEditor::SetLanguageDefinition(const LanguageDefinition & aLanguageDef)
 {
 	mLanguageDefinition = aLanguageDef;
 	mRegexList.clear();
 
-	for (auto &r : mLanguageDefinition.mTokenRegexStrings)
+	for (auto& r : mLanguageDefinition.mTokenRegexStrings)
 		mRegexList.push_back(std::make_pair(std::regex(r.first, std::regex_constants::optimize), r.second));
-
-	Colorize();
 }
 
-void TextEditor::SetPalette(const Palette &aValue)
+void TextEditor::SetPalette(const Palette & aValue)
 {
 	mPaletteBase = aValue;
 }
 
-std::string TextEditor::GetText(const Coordinates &aStart, const Coordinates &aEnd) const
+int TextEditor::AppendBuffer(std::string& aBuffer, char chr, int aIndex)
+{
+	if (chr != '\t')
+	{
+		aBuffer.push_back(chr);
+		return aIndex + 1;
+	}
+	else
+	{
+		//auto num = mTabSize - aIndex % mTabSize;
+		//for (int j = num; j > 0; --j)
+		//	aBuffer.push_back(' ');
+		//return aIndex + num;
+		return aIndex;
+	}
+}
+
+std::string TextEditor::GetText(const Coordinates & aStart, const Coordinates & aEnd) const
 {
 	std::string result;
 
-	auto lstart = aStart.mLine;
-	auto lend = aEnd.mLine;
-	auto istart = GetCharacterIndex(aStart);
-	auto iend = GetCharacterIndex(aEnd);
-	size_t s = 0;
-
-	for (size_t i = lstart; i < lend; i++)
-		s += mLines[i].size();
-
-	result.reserve(s + s / 8);
-
-	while (istart < iend || lstart < lend)
+	int prevLineNo = aStart.mLine;
+	for (auto it = aStart; it <= aEnd; Advance(it))
 	{
-		if (lstart >= (int)mLines.size())
+		if (prevLineNo != it.mLine && it.mLine < (int)mLines.size())
+			result.push_back('\n');
+
+		if (it == aEnd)
 			break;
 
-		auto &line = mLines[lstart];
-		if (istart < (int)line.size())
-		{
-			result += line[istart].mChar;
-			istart++;
-		}
-		else
-		{
-			istart = 0;
-			++lstart;
-			result += '\n';
-		}
+		prevLineNo = it.mLine;
+		const auto& line = mLines[it.mLine];
+		if (!line.empty() && it.mColumn < (int)line.size())
+			result.push_back(line[it.mColumn].mChar);
 	}
 
 	return result;
@@ -94,10 +117,11 @@ TextEditor::Coordinates TextEditor::GetActualCursorCoordinates() const
 	return SanitizeCoordinates(mState.mCursorPosition);
 }
 
-TextEditor::Coordinates TextEditor::SanitizeCoordinates(const Coordinates &aValue) const
+TextEditor::Coordinates TextEditor::SanitizeCoordinates(const Coordinates & aValue) const
 {
 	auto line = aValue.mLine;
 	auto column = aValue.mColumn;
+
 	if (line >= (int)mLines.size())
 	{
 		if (mLines.empty())
@@ -108,125 +132,56 @@ TextEditor::Coordinates TextEditor::SanitizeCoordinates(const Coordinates &aValu
 		else
 		{
 			line = (int)mLines.size() - 1;
-			column = GetLineMaxColumn(line);
+			column = (int)mLines[line].size();
 		}
-		return Coordinates(line, column);
 	}
 	else
 	{
-		column = mLines.empty() ? 0 : std::min(column, GetLineMaxColumn(line));
-		return Coordinates(line, column);
+		column = mLines.empty() ? 0 : std::min((int)mLines[line].size(), aValue.mColumn);
 	}
+
+	return Coordinates(line, column);
 }
 
-// https://en.wikipedia.org/wiki/UTF-8
-// We assume that the char is a standalone character (<128) or a leading byte of an UTF-8 code sequence (non-10xxxxxx code)
-static int UTF8CharLength(TextEditor::Char c)
-{
-	if ((c & 0xFE) == 0xFC)
-		return 6;
-	if ((c & 0xFC) == 0xF8)
-		return 5;
-	if ((c & 0xF8) == 0xF0)
-		return 4;
-	else if ((c & 0xF0) == 0xE0)
-		return 3;
-	else if ((c & 0xE0) == 0xC0)
-		return 2;
-	return 1;
-}
-
-// "Borrowed" from ImGui source
-static inline int ImTextCharToUtf8(char *buf, int buf_size, unsigned int c)
-{
-	if (c < 0x80)
-	{
-		buf[0] = (char)c;
-		return 1;
-	}
-	if (c < 0x800)
-	{
-		if (buf_size < 2)
-			return 0;
-		buf[0] = (char)(0xc0 + (c >> 6));
-		buf[1] = (char)(0x80 + (c & 0x3f));
-		return 2;
-	}
-	if (c >= 0xdc00 && c < 0xe000)
-	{
-		return 0;
-	}
-	if (c >= 0xd800 && c < 0xdc00)
-	{
-		if (buf_size < 4)
-			return 0;
-		buf[0] = (char)(0xf0 + (c >> 18));
-		buf[1] = (char)(0x80 + ((c >> 12) & 0x3f));
-		buf[2] = (char)(0x80 + ((c >> 6) & 0x3f));
-		buf[3] = (char)(0x80 + ((c)&0x3f));
-		return 4;
-	}
-	// else if (c < 0x10000)
-	{
-		if (buf_size < 3)
-			return 0;
-		buf[0] = (char)(0xe0 + (c >> 12));
-		buf[1] = (char)(0x80 + ((c >> 6) & 0x3f));
-		buf[2] = (char)(0x80 + ((c)&0x3f));
-		return 3;
-	}
-}
-
-void TextEditor::Advance(Coordinates &aCoordinates) const
+void TextEditor::Advance(Coordinates & aCoordinates) const
 {
 	if (aCoordinates.mLine < (int)mLines.size())
 	{
-		auto &line = mLines[aCoordinates.mLine];
-		auto cindex = GetCharacterIndex(aCoordinates);
+		auto& line = mLines[aCoordinates.mLine];
 
-		if (cindex + 1 < (int)line.size())
-		{
-			auto delta = UTF8CharLength(line[cindex].mChar);
-			cindex = std::min(cindex + delta, (int)line.size() - 1);
-		}
+		if (aCoordinates.mColumn + 1 < (int)line.size())
+			++aCoordinates.mColumn;
 		else
 		{
 			++aCoordinates.mLine;
-			cindex = 0;
+			aCoordinates.mColumn = 0;
 		}
-		aCoordinates.mColumn = GetCharacterColumn(aCoordinates.mLine, cindex);
 	}
 }
 
-void TextEditor::DeleteRange(const Coordinates &aStart, const Coordinates &aEnd)
+void TextEditor::DeleteRange(const Coordinates & aStart, const Coordinates & aEnd)
 {
 	assert(aEnd >= aStart);
 	assert(!mReadOnly);
 
-	// printf("D(%d.%d)-(%d.%d)\n", aStart.mLine, aStart.mColumn, aEnd.mLine, aEnd.mColumn);
-
 	if (aEnd == aStart)
 		return;
 
-	auto start = GetCharacterIndex(aStart);
-	auto end = GetCharacterIndex(aEnd);
-
 	if (aStart.mLine == aEnd.mLine)
 	{
-		auto &line = mLines[aStart.mLine];
-		auto n = GetLineMaxColumn(aStart.mLine);
-		if (aEnd.mColumn >= n)
-			line.erase(line.begin() + start, line.end());
+		auto& line = mLines[aStart.mLine];
+		if (aEnd.mColumn >= (int)line.size())
+			line.erase(line.begin() + aStart.mColumn, line.end());
 		else
-			line.erase(line.begin() + start, line.begin() + end);
+			line.erase(line.begin() + aStart.mColumn, line.begin() + aEnd.mColumn);
 	}
 	else
 	{
-		auto &firstLine = mLines[aStart.mLine];
-		auto &lastLine = mLines[aEnd.mLine];
+		auto& firstLine = mLines[aStart.mLine];
+		auto& lastLine = mLines[aEnd.mLine];
 
-		firstLine.erase(firstLine.begin() + start, firstLine.end());
-		lastLine.erase(lastLine.begin(), lastLine.begin() + end);
+		firstLine.erase(firstLine.begin() + aStart.mColumn, firstLine.end());
+		lastLine.erase(lastLine.begin(), lastLine.begin() + std::min((int)lastLine.size(), aEnd.mColumn));
 
 		if (aStart.mLine < aEnd.mLine)
 			firstLine.insert(firstLine.end(), lastLine.begin(), lastLine.end());
@@ -238,29 +193,29 @@ void TextEditor::DeleteRange(const Coordinates &aStart, const Coordinates &aEnd)
 	mTextChanged = true;
 }
 
-int TextEditor::InsertTextAt(Coordinates & /* inout */ aWhere, const char *aValue)
+int TextEditor::InsertTextAt(Coordinates& /* inout */ aWhere, const char * aValue)
 {
 	assert(!mReadOnly);
 
-	int cindex = GetCharacterIndex(aWhere);
 	int totalLines = 0;
-	while (*aValue != '\0')
+	auto chr = *aValue;
+	while (chr != '\0')
 	{
-		assert(!mLines.empty());
+		if (mLines.empty())
+			mLines.push_back(Line());
 
-		if (*aValue == '\r')
+		if (chr == '\r')
 		{
 			// skip
-			++aValue;
 		}
-		else if (*aValue == '\n')
+		else if (chr == '\n')
 		{
-			if (cindex < (int)mLines[aWhere.mLine].size())
+			if (aWhere.mColumn < (int)mLines[aWhere.mLine].size())
 			{
-				auto &newLine = InsertLine(aWhere.mLine + 1);
-				auto &line = mLines[aWhere.mLine];
-				newLine.insert(newLine.begin(), line.begin() + cindex, line.end());
-				line.erase(line.begin() + cindex, line.end());
+				auto& newLine = InsertLine(aWhere.mLine + 1);
+				auto& line = mLines[aWhere.mLine];
+				newLine.insert(newLine.begin(), line.begin() + aWhere.mColumn, line.end());
+				line.erase(line.begin() + aWhere.mColumn, line.end());
 			}
 			else
 			{
@@ -268,18 +223,15 @@ int TextEditor::InsertTextAt(Coordinates & /* inout */ aWhere, const char *aValu
 			}
 			++aWhere.mLine;
 			aWhere.mColumn = 0;
-			cindex = 0;
 			++totalLines;
-			++aValue;
 		}
 		else
 		{
-			auto &line = mLines[aWhere.mLine];
-			auto d = UTF8CharLength(*aValue);
-			while (d-- > 0 && *aValue != '\0')
-				line.insert(line.begin() + cindex++, Glyph(*aValue++, PaletteIndex::Default));
-			aWhere.mColumn = GetCharacterColumn(aWhere.mLine, cindex);
+			auto& line = mLines[aWhere.mLine];
+			line.insert(line.begin() + aWhere.mColumn, Glyph(chr, PaletteIndex::Default));
+			++aWhere.mColumn;
 		}
+		chr = *(++aValue);
 
 		mTextChanged = true;
 	}
@@ -287,272 +239,105 @@ int TextEditor::InsertTextAt(Coordinates & /* inout */ aWhere, const char *aValu
 	return totalLines;
 }
 
-void TextEditor::AddUndo(UndoRecord &aValue)
+void TextEditor::AddUndo(UndoRecord& aValue)
 {
 	assert(!mReadOnly);
-	// printf("AddUndo: (@%d.%d) +\'%s' [%d.%d .. %d.%d], -\'%s', [%d.%d .. %d.%d] (@%d.%d)\n",
-	//	aValue.mBefore.mCursorPosition.mLine, aValue.mBefore.mCursorPosition.mColumn,
-	//	aValue.mAdded.c_str(), aValue.mAddedStart.mLine, aValue.mAddedStart.mColumn, aValue.mAddedEnd.mLine, aValue.mAddedEnd.mColumn,
-	//	aValue.mRemoved.c_str(), aValue.mRemovedStart.mLine, aValue.mRemovedStart.mColumn, aValue.mRemovedEnd.mLine, aValue.mRemovedEnd.mColumn,
-	//	aValue.mAfter.mCursorPosition.mLine, aValue.mAfter.mCursorPosition.mColumn
-	//	);
 
-	mUndoBuffer.resize((size_t)(mUndoIndex + 1));
+	mUndoBuffer.resize(mUndoIndex + 1);
 	mUndoBuffer.back() = aValue;
 	++mUndoIndex;
 }
 
-TextEditor::Coordinates TextEditor::ScreenPosToCoordinates(const ImVec2 &aPosition, bool aInsertionMode) const
+TextEditor::Coordinates TextEditor::ScreenPosToCoordinates(const ImVec2& aPosition) const
 {
 	ImVec2 origin = ImGui::GetCursorScreenPos();
-	ImVec2 local(aPosition.x - origin.x + 3.0f, aPosition.y - origin.y);
-	float spaceSize = ImGui::GetFont()->CalcTextSizeA(ImGui::GetFontSize(), FLT_MAX, -1.0f, " ").x;
+	ImVec2 local(aPosition.x - origin.x, aPosition.y - origin.y);
 
 	int lineNo = std::max(0, (int)floor(local.y / mCharAdvance.y));
 
+	/*
+		Compute columnCoord according to text size
+	*/
 	int columnCoord = 0;
+	float columnWidth = 0.0f;
+	std::string cumulatedString = "";
+	float cumulatedStringWidth[2] = { 0.0f, 0.0f }; //( [0] is the lastest, [1] is the previous. I use that trick to check where cursor is exactly (important for tabs)
 
 	if (lineNo >= 0 && lineNo < (int)mLines.size())
 	{
-		auto &line = mLines.at(lineNo);
-
-		int columnIndex = 0;
-		std::string cumulatedString = "";
-		float columnWidth = 0.0f;
-		float columnX = 0.0f;
-		int delta = 0;
+		auto& line = mLines.at(lineNo);
 
 		// First we find the hovered column coord.
-		while (mTextStart + columnX - (aInsertionMode ? 0.5f : 0.0f) * columnWidth < local.x && (size_t)columnIndex < line.size())
+		while (mTextStart + cumulatedStringWidth[0] < local.x &&
+			(size_t)columnCoord < line.size())
 		{
-			columnCoord += delta;
-			if (line[columnIndex].mChar == '\t')
-			{
-				float oldX = columnX;
-				columnX = (1.0f + std::floor((1.0f + columnX) / (float(mTabSize) * spaceSize))) * (float(mTabSize) * spaceSize);
-				columnWidth = columnX - oldX;
-				delta = columnCoord - (columnCoord / mTabSize) * mTabSize + mTabSize;
-			}
-			else
-			{
-				char buf[7];
-				auto d = UTF8CharLength(line[columnIndex].mChar);
-				int i = 0;
-				while (i < 6 && d-- > 0)
-					buf[i++] = line[columnIndex].mChar;
-				buf[i] = '\0';
-				columnWidth = ImGui::GetFont()->CalcTextSizeA(ImGui::GetFontSize(), FLT_MAX, -1.0f, buf).x;
-				columnX += columnWidth;
-				delta = 1;
-			}
-			++columnIndex;
+			cumulatedStringWidth[1] = cumulatedStringWidth[0];
+			cumulatedString += line[columnCoord].mChar;
+			cumulatedStringWidth[0] = ImGui::GetFont()->CalcTextSizeA(ImGui::GetFontSize(), FLT_MAX, -1.0f, cumulatedString.c_str(), nullptr, nullptr).x;
+			columnWidth = (cumulatedStringWidth[0] - cumulatedStringWidth[1]);
+			columnCoord++;
 		}
 
 		// Then we reduce by 1 column coord if cursor is on the left side of the hovered column.
-		// if (aInsertionMode && mTextStart + columnX - columnWidth * 2.0f < local.x)
-		//	columnIndex = std::min((int)line.size() - 1, columnIndex + 1);
+		if (mTextStart + cumulatedStringWidth[0] - columnWidth / 2.0f > local.x)
+			columnCoord = std::max(0, columnCoord - 1);
 	}
 
 	return SanitizeCoordinates(Coordinates(lineNo, columnCoord));
 }
 
-TextEditor::Coordinates TextEditor::FindWordStart(const Coordinates &aFrom) const
+TextEditor::Coordinates TextEditor::FindWordStart(const Coordinates & aFrom) const
 {
 	Coordinates at = aFrom;
 	if (at.mLine >= (int)mLines.size())
 		return at;
 
-	auto &line = mLines[at.mLine];
-	auto cindex = GetCharacterIndex(at);
+	auto& line = mLines[at.mLine];
 
-	if (cindex >= (int)line.size())
+	if (at.mColumn >= (int)line.size())
 		return at;
 
-	while (cindex > 0 && isspace(line[cindex].mChar))
-		--cindex;
-
-	auto cstart = (PaletteIndex)line[cindex].mColorIndex;
-	while (cindex > 0)
+	auto cstart = (PaletteIndex)line[at.mColumn].mColorIndex;
+	while (at.mColumn > 0)
 	{
-		auto c = line[cindex].mChar;
-		if ((c & 0xC0) != 0x80) // not UTF code sequence 10xxxxxx
-		{
-			if (c <= 32 && isspace(c))
-			{
-				cindex++;
-				break;
-			}
-			if (cstart != (PaletteIndex)line[size_t(cindex - 1)].mColorIndex)
-				break;
-		}
-		--cindex;
-	}
-	return Coordinates(at.mLine, GetCharacterColumn(at.mLine, cindex));
-}
-
-TextEditor::Coordinates TextEditor::FindWordEnd(const Coordinates &aFrom) const
-{
-	Coordinates at = aFrom;
-	if (at.mLine >= (int)mLines.size())
-		return at;
-
-	auto &line = mLines[at.mLine];
-	auto cindex = GetCharacterIndex(at);
-
-	if (cindex >= (int)line.size())
-		return at;
-
-	bool prevspace = (bool)!!isspace(line[cindex].mChar);
-	auto cstart = (PaletteIndex)line[cindex].mColorIndex;
-	while (cindex < (int)line.size())
-	{
-		auto c = line[cindex].mChar;
-		auto d = UTF8CharLength(c);
-		if (cstart != (PaletteIndex)line[cindex].mColorIndex)
+		if (cstart != (PaletteIndex)line[at.mColumn - 1].mColorIndex)
 			break;
-
-		if (prevspace != !!isspace(c))
-		{
-			if (isspace(c))
-				while (cindex < (int)line.size() && isspace(line[cindex].mChar))
-					++cindex;
-			break;
-		}
-		cindex += d;
+		--at.mColumn;
 	}
-	return Coordinates(aFrom.mLine, GetCharacterColumn(aFrom.mLine, cindex));
-}
-
-TextEditor::Coordinates TextEditor::FindNextWord(const Coordinates &aFrom) const
-{
-	Coordinates at = aFrom;
-	if (at.mLine >= (int)mLines.size())
-		return at;
-
-	// skip to the next non-word character
-	auto cindex = GetCharacterIndex(aFrom);
-	bool isword = false;
-	bool skip = false;
-	if (cindex < (int)mLines[at.mLine].size())
-	{
-		auto &line = mLines[at.mLine];
-		isword = !!isalnum(line[cindex].mChar);
-		skip = isword;
-	}
-
-	while (!isword || skip)
-	{
-		if (at.mLine >= mLines.size())
-		{
-			auto l = std::max(0, (int)mLines.size() - 1);
-			return Coordinates(l, GetLineMaxColumn(l));
-		}
-
-		auto &line = mLines[at.mLine];
-		if (cindex < (int)line.size())
-		{
-			isword = isalnum(line[cindex].mChar);
-
-			if (isword && !skip)
-				return Coordinates(at.mLine, GetCharacterColumn(at.mLine, cindex));
-
-			if (!isword)
-				skip = false;
-
-			cindex++;
-		}
-		else
-		{
-			cindex = 0;
-			++at.mLine;
-			skip = false;
-			isword = false;
-		}
-	}
-
 	return at;
 }
 
-int TextEditor::GetCharacterIndex(const Coordinates &aCoordinates) const
+TextEditor::Coordinates TextEditor::FindWordEnd(const Coordinates & aFrom) const
 {
-	if (aCoordinates.mLine >= mLines.size())
-		return -1;
-	auto &line = mLines[aCoordinates.mLine];
-	int c = 0;
-	int i = 0;
-	for (; i < line.size() && c < aCoordinates.mColumn;)
+	Coordinates at = aFrom;
+	if (at.mLine >= (int)mLines.size())
+		return at;
+
+	auto& line = mLines[at.mLine];
+
+	if (at.mColumn >= (int)line.size())
+		return at;
+
+	auto cstart = (PaletteIndex)line[at.mColumn].mColorIndex;
+	while (at.mColumn < (int)line.size())
 	{
-		if (line[i].mChar == '\t')
-			c = (c / mTabSize) * mTabSize + mTabSize;
-		else
-			++c;
-		i += UTF8CharLength(line[i].mChar);
+		if (cstart != (PaletteIndex)line[at.mColumn].mColorIndex)
+			break;
+		++at.mColumn;
 	}
-	return i;
+	return at;
 }
 
-int TextEditor::GetCharacterColumn(int aLine, int aIndex) const
-{
-	if (aLine >= mLines.size())
-		return 0;
-	auto &line = mLines[aLine];
-	int col = 0;
-	int i = 0;
-	while (i < aIndex && i < (int)line.size())
-	{
-		auto c = line[i].mChar;
-		i += UTF8CharLength(c);
-		if (c == '\t')
-			col = (col / mTabSize) * mTabSize + mTabSize;
-		else
-			col++;
-	}
-	return col;
-}
-
-int TextEditor::GetLineCharacterCount(int aLine) const
-{
-	if (aLine >= mLines.size())
-		return 0;
-	auto &line = mLines[aLine];
-	int c = 0;
-	for (unsigned i = 0; i < line.size(); c++)
-		i += UTF8CharLength(line[i].mChar);
-	return c;
-}
-
-int TextEditor::GetLineMaxColumn(int aLine) const
-{
-	if (aLine >= mLines.size())
-		return 0;
-	auto &line = mLines[aLine];
-	int col = 0;
-	for (unsigned i = 0; i < line.size();)
-	{
-		auto c = line[i].mChar;
-		if (c == '\t')
-			col = (col / mTabSize) * mTabSize + mTabSize;
-		else
-			col++;
-		i += UTF8CharLength(c);
-	}
-	return col;
-}
-
-bool TextEditor::IsOnWordBoundary(const Coordinates &aAt) const
+bool TextEditor::IsOnWordBoundary(const Coordinates & aAt) const
 {
 	if (aAt.mLine >= (int)mLines.size() || aAt.mColumn == 0)
 		return true;
 
-	auto &line = mLines[aAt.mLine];
-	auto cindex = GetCharacterIndex(aAt);
-	if (cindex >= (int)line.size())
+	auto& line = mLines[aAt.mLine];
+	if (aAt.mColumn >= (int)line.size())
 		return true;
 
-	if (mColorizerEnabled)
-		return line[cindex].mColorIndex != line[size_t(cindex - 1)].mColorIndex;
-
-	return isspace(line[cindex].mChar) != isspace(line[cindex - 1].mChar);
+	return line[aAt.mColumn].mColorIndex != line[aAt.mColumn - 1].mColorIndex;
 }
 
 void TextEditor::RemoveLine(int aStart, int aEnd)
@@ -562,7 +347,7 @@ void TextEditor::RemoveLine(int aStart, int aEnd)
 	assert(mLines.size() > (size_t)(aEnd - aStart));
 
 	ErrorMarkers etmp;
-	for (auto &i : mErrorMarkers)
+	for (auto& i : mErrorMarkers)
 	{
 		ErrorMarkers::value_type e(i.first >= aStart ? i.first - 1 : i.first, i.second);
 		if (e.first >= aStart && e.first <= aEnd)
@@ -592,7 +377,7 @@ void TextEditor::RemoveLine(int aIndex)
 	assert(mLines.size() > 1);
 
 	ErrorMarkers etmp;
-	for (auto &i : mErrorMarkers)
+	for (auto& i : mErrorMarkers)
 	{
 		ErrorMarkers::value_type e(i.first > aIndex ? i.first - 1 : i.first, i.second);
 		if (e.first - 1 == aIndex)
@@ -616,14 +401,14 @@ void TextEditor::RemoveLine(int aIndex)
 	mTextChanged = true;
 }
 
-TextEditor::Line &TextEditor::InsertLine(int aIndex)
+TextEditor::Line& TextEditor::InsertLine(int aIndex)
 {
 	assert(!mReadOnly);
 
-	auto &result = *mLines.insert(mLines.begin() + aIndex, Line());
+	auto& result = *mLines.insert(mLines.begin() + aIndex, Line());
 
 	ErrorMarkers etmp;
-	for (auto &i : mErrorMarkers)
+	for (auto& i : mErrorMarkers)
 		etmp.insert(ErrorMarkers::value_type(i.first >= aIndex ? i.first + 1 : i.first, i.second));
 	mErrorMarkers = std::move(etmp);
 
@@ -638,29 +423,25 @@ TextEditor::Line &TextEditor::InsertLine(int aIndex)
 std::string TextEditor::GetWordUnderCursor() const
 {
 	auto c = GetCursorPosition();
+	c.mColumn = std::max(c.mColumn - 1, 0);
 	return GetWordAt(c);
 }
 
-std::string TextEditor::GetWordAt(const Coordinates &aCoords) const
+std::string TextEditor::GetWordAt(const Coordinates & aCoords) const
 {
 	auto start = FindWordStart(aCoords);
 	auto end = FindWordEnd(aCoords);
 
 	std::string r;
 
-	auto istart = GetCharacterIndex(start);
-	auto iend = GetCharacterIndex(end);
-
-	for (auto it = istart; it < iend; ++it)
-		r.push_back(mLines[aCoords.mLine][it].mChar);
+	for (auto it = start; it < end; Advance(it))
+		r.push_back(mLines[it.mLine][it.mColumn].mChar);
 
 	return r;
 }
 
-ImU32 TextEditor::GetGlyphColor(const Glyph &aGlyph) const
+ImU32 TextEditor::GetGlyphColor(const Glyph& aGlyph) const
 {
-	if (!mColorizerEnabled)
-		return mPalette[(int)PaletteIndex::Default];
 	if (aGlyph.mComment)
 		return mPalette[(int)PaletteIndex::Comment];
 	if (aGlyph.mMultiLineComment)
@@ -675,93 +456,177 @@ ImU32 TextEditor::GetGlyphColor(const Glyph &aGlyph) const
 		const int c3 = (((ppcolor >> 24) & 0xff) + ((color >> 24) & 0xff)) / 2;
 		return ImU32(c0 | (c1 << 8) | (c2 << 16) | (c3 << 24));
 	}
+
 	return color;
 }
 
 void TextEditor::HandleKeyboardInputs()
 {
+	ImGuiIO& io = ImGui::GetIO();
+	auto shift = io.KeyShift;
+	auto ctrl = io.ConfigMacOSXBehaviors ? io.KeySuper : io.KeyCtrl;
+	auto alt = io.ConfigMacOSXBehaviors ? io.KeyCtrl : io.KeyAlt;
+
 	if (ImGui::IsWindowFocused())
 	{
 		if (ImGui::IsWindowHovered())
 			ImGui::SetMouseCursor(ImGuiMouseCursor_TextInput);
-		// ImGui::CaptureKeyboardFromApp(true);
-
-		ImGuiIO &io = ImGui::GetIO();
-		auto isOSX = io.ConfigMacOSXBehaviors;
-		auto alt = io.KeyAlt;
-		auto ctrl = io.KeyCtrl;
-		auto shift = io.KeyShift;
-		auto super = io.KeySuper;
-
-		auto isShortcut = (isOSX ? (super && !ctrl) : (ctrl && !super)) && !alt && !shift;
-		auto isShiftShortcut = (isOSX ? (super && !ctrl) : (ctrl && !super)) && shift && !alt;
-		auto isWordmoveKey = isOSX ? alt : ctrl;
-		auto isAltOnly = alt && !ctrl && !shift && !super;
-		auto isCtrlOnly = ctrl && !alt && !shift && !super;
-		auto isShiftOnly = shift && !alt && !ctrl && !super;
+		//ImGui::CaptureKeyboardFromApp(true);
 
 		io.WantCaptureKeyboard = true;
 		io.WantTextInput = true;
 
-		if (!IsReadOnly() && isShortcut && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Z)))
+		// auto completion shortcuts
+		if (mACOpened)
+		{
+			int keyCount = 0;
+
+			for (size_t i = 0; i < io.InputQueueCharacters.Size; i++)
+				if (io.InputQueueCharacters[i] != 0)
+					keyCount++;
+			for (size_t i = ImGuiKey_NamedKey_BEGIN; i < ImGuiKey_COUNT; i++)
+				keyCount += ImGui::IsKeyPressed(ImGui::GetKeyIndex(i));
+
+			if (keyCount != 0) {
+				if (!ctrl && !alt && !shift && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_UpArrow)))
+					mACIndex = std::max(mACIndex - 1, 0), mACSwitched = true;
+				else if (!ctrl && !alt && !shift && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_DownArrow)))
+					mACIndex = std::min(mACIndex + 1, (int)mACSuggestions.size()), mACSwitched = true;
+				else if (!ctrl && !alt && !shift && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Tab))) {}
+				else if (mACSwitched && !ctrl && !alt && !shift && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Enter))) {}
+				else mACOpened = false; // TODO: Make it better
+			}
+		}
+
+		// regular shortcuts
+		if (!IsReadOnly() && ctrl && !shift && !alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Z)))
 			Undo();
-		else if (!IsReadOnly() && isAltOnly && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Backspace)))
+		else if (!IsReadOnly() && !ctrl && !shift && alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Backspace)))
 			Undo();
-		else if (!IsReadOnly() && isShortcut && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Y)))
+		else if (!IsReadOnly() && ctrl && !shift && !alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Y)))
 			Redo();
-		else if (!IsReadOnly() && isShiftShortcut && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Z)))
-			Redo();
-		else if (!alt && !ctrl && !super && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_UpArrow)))
+		else if (!mACOpened && !ctrl && !alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_UpArrow)))
 			MoveUp(1, shift);
-		else if (!alt && !ctrl && !super && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_DownArrow)))
+		else if (!mACOpened && !ctrl && !alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_DownArrow)))
 			MoveDown(1, shift);
-		else if ((isOSX ? !ctrl : !alt) && !super && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_LeftArrow)))
-			MoveLeft(1, shift, isWordmoveKey);
-		else if ((isOSX ? !ctrl : !alt) && !super && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_RightArrow)))
-			MoveRight(1, shift, isWordmoveKey);
-		else if (!alt && !ctrl && !super && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_PageUp)))
+		else if (!alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_LeftArrow)))
+			MoveLeft(1, shift, ctrl);
+		else if (!alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_RightArrow)))
+			MoveRight(1, shift, ctrl);
+		else if (!alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_PageUp)))
 			MoveUp(GetPageSize() - 4, shift);
-		else if (!alt && !ctrl && !super && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_PageDown)))
+		else if (!alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_PageDown)))
 			MoveDown(GetPageSize() - 4, shift);
-		else if (ctrl && !alt && !super && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Home)))
+		else if (!alt && ctrl && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Home)))
 			MoveTop(shift);
-		else if (ctrl && !alt && !super && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_End)))
+		else if (ctrl && !alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_End)))
 			MoveBottom(shift);
-		else if (!alt && !ctrl && !super && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Home)))
+		else if (!ctrl && !alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Home)))
 			MoveHome(shift);
-		else if (!alt && !ctrl && !super && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_End)))
+		else if (!ctrl && !alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_End)))
 			MoveEnd(shift);
-		else if (!IsReadOnly() && !alt && !ctrl && !shift && !super && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Delete)))
+		else if (!IsReadOnly() && !shift && !alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Delete))) {
+			if (ctrl)
+				MoveRight(1, true, true);
 			Delete();
-		else if (!IsReadOnly() && !alt && !ctrl && !shift && !super && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Backspace)))
-			Backspace();
-		else if (!alt && !ctrl && !shift && !super && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Insert)))
+		}
+		else if (!IsReadOnly() && !shift && !alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Backspace))) {
+			if (ctrl)
+				MoveLeft(1, true, true);
+			BackSpace();
+		}
+		else if (!ctrl && !shift && !alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Insert)))
 			mOverwrite ^= true;
-		else if (isCtrlOnly && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Insert)))
+		else if (ctrl && !shift && !alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Insert)))
 			Copy();
-		else if (isShortcut && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_C)))
+		else if (ctrl && !shift && !alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_C)))
 			Copy();
-		else if (!IsReadOnly() && isShiftOnly && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Insert)))
+		else if (!IsReadOnly() && !ctrl && shift && !alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Insert)))
 			Paste();
-		else if (!IsReadOnly() && isShortcut && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_V)))
+		else if (!IsReadOnly() && ctrl && !shift && !alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_V)))
 			Paste();
-		else if (isShortcut && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_X)))
+		else if (ctrl && !shift && !alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_X)))
 			Cut();
-		else if (isShiftOnly && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Delete)))
+		else if (!ctrl && shift && !alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Delete)))
 			Cut();
-		else if (isShortcut && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_A)))
+		else if (ctrl && !shift && !alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_A)))
 			SelectAll();
-		else if (!IsReadOnly() && !alt && !ctrl && !shift && !super && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Enter)))
+		else if (mAutocomplete && ctrl && !shift && !alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Space)))
+		{
+			mACWord = GetWordUnderCursor();
+
+			bool isValid = false;
+			for (int i = 0; i < mACWord.size(); i++)
+				if ((mACWord[i] >= 'a' && mACWord[i] <= 'z') || (mACWord[i] >= 'A' && mACWord[i] <= 'Z'))
+				{
+					isValid = true;
+					break;
+				}
+
+			if (isValid) {
+				mACSuggestions.clear();
+				mACIndex = 0;
+				mACSwitched = false;
+
+				// starting with the written word
+				for (auto& str : mLanguageDefinition.mKeywords)
+					if (str.find(mACWord) == 0)
+						mACSuggestions.push_back(str);
+
+				for (auto& str : mLanguageDefinition.mIdentifiers)
+					if (str.first.find(mACWord) == 0)
+						mACSuggestions.push_back(str.first);
+
+				// containing the word
+				for (auto& str : mLanguageDefinition.mKeywords) {
+					size_t ind = str.find(mACWord);
+					if (ind > 0 && ind != std::string::npos)
+						mACSuggestions.push_back(str);
+				}
+
+				for (auto& str : mLanguageDefinition.mIdentifiers) {
+					size_t ind = str.first.find(mACWord);
+					if (ind > 0 && ind != std::string::npos)
+						mACSuggestions.push_back(str.first);
+				}
+
+				if (mACSuggestions.size() > 0) {
+					mACOpened = true;
+					mACPosition = GetCursorPosition();
+				}
+			}
+		}
+		else if (mACOpened && !ctrl && !alt && !shift && (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Tab))
+			|| (mACSwitched && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Enter))))) {
+
+			auto curCoord = GetCursorPosition();
+			curCoord.mColumn = std::max(curCoord.mColumn - 1, 0);
+
+			auto acStart = FindWordStart(curCoord);
+			auto acEnd = FindWordEnd(curCoord);
+
+			SetSelection(acStart, acEnd);
+			BackSpace();
+			InsertText(mACSuggestions[mACIndex]);
+
+			mACOpened = false;
+		}
+		else if (!IsReadOnly() && !ctrl && !shift && !alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Enter)))
 			EnterCharacter('\n', false);
-		else if (!IsReadOnly() && !alt && !ctrl && !super && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Tab)))
+		else if (!IsReadOnly() && !ctrl && !alt && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Tab)))
 			EnterCharacter('\t', shift);
-		if (!IsReadOnly() && !io.InputQueueCharacters.empty() && !ctrl && !super)
+		else if (!IsReadOnly() && !ctrl && !alt)
 		{
 			for (int i = 0; i < io.InputQueueCharacters.Size; i++)
 			{
-				auto c = io.InputQueueCharacters[i];
-				if (c != 0 && (c == '\n' || c >= 32))
-					EnterCharacter(c, shift);
+				auto c = (unsigned char)io.InputQueueCharacters[i];
+				if (c != 0)
+				{
+					if (isprint(c) || isspace(c))
+					{
+						EnterCharacter((char)c, shift);
+					}
+				}
 			}
 			io.InputQueueCharacters.resize(0);
 		}
@@ -770,7 +635,7 @@ void TextEditor::HandleKeyboardInputs()
 
 void TextEditor::HandleMouseInputs()
 {
-	ImGuiIO &io = ImGui::GetIO();
+	ImGuiIO& io = ImGui::GetIO();
 	auto shift = io.KeyShift;
 	auto ctrl = io.ConfigMacOSXBehaviors ? io.KeySuper : io.KeyCtrl;
 	auto alt = io.ConfigMacOSXBehaviors ? io.KeyCtrl : io.KeyAlt;
@@ -785,7 +650,7 @@ void TextEditor::HandleMouseInputs()
 			auto tripleClick = click && !doubleClick && (mLastClick != -1.0f && (t - mLastClick) < io.MouseDoubleClickTime);
 
 			/*
-			Left mouse button triple click
+				Left mouse button triple click
 			*/
 
 			if (tripleClick)
@@ -801,7 +666,7 @@ void TextEditor::HandleMouseInputs()
 			}
 
 			/*
-			Left mouse button double click
+				Left mouse button double click
 			*/
 
 			else if (doubleClick)
@@ -820,11 +685,12 @@ void TextEditor::HandleMouseInputs()
 			}
 
 			/*
-			Left mouse button click
+				Left mouse button click
 			*/
 			else if (click)
 			{
-				mState.mCursorPosition = mInteractiveStart = mInteractiveEnd = SanitizeCoordinates(ScreenPosToCoordinates(ImGui::GetMousePos(), !mOverwrite));
+				mACOpened = false;
+				mState.mCursorPosition = mInteractiveStart = mInteractiveEnd = SanitizeCoordinates(ScreenPosToCoordinates(ImGui::GetMousePos()));
 				if (ctrl)
 					mSelectionMode = SelectionMode::Word;
 				else
@@ -837,7 +703,7 @@ void TextEditor::HandleMouseInputs()
 			else if (ImGui::IsMouseDragging(0) && ImGui::IsMouseDown(0))
 			{
 				io.WantCaptureMouse = true;
-				mState.mCursorPosition = mInteractiveEnd = SanitizeCoordinates(ScreenPosToCoordinates(ImGui::GetMousePos(), !mOverwrite));
+				mState.mCursorPosition = mInteractiveEnd = SanitizeCoordinates(ScreenPosToCoordinates(ImGui::GetMousePos()));
 				SetSelection(mInteractiveStart, mInteractiveEnd, mSelectionMode);
 			}
 		}
@@ -858,7 +724,8 @@ void TextEditor::Render()
 		mPalette[i] = ImGui::ColorConvertFloat4ToU32(color);
 	}
 
-	assert(mLineBuffer.empty());
+	static std::string buffer;
+	assert(buffer.empty());
 
 	auto contentSize = ImGui::GetWindowContentRegionMax();
 	auto drawList = ImGui::GetWindowDrawList();
@@ -885,6 +752,7 @@ void TextEditor::Render()
 
 	if (!mLines.empty())
 	{
+		auto fontScale = ImGui::GetFontSize() / ImGui::GetFont()->FontSize;
 		float spaceSize = ImGui::GetFont()->CalcTextSizeA(ImGui::GetFontSize(), FLT_MAX, -1.0f, " ", nullptr, nullptr).x;
 
 		while (lineNo <= lineMax)
@@ -892,11 +760,11 @@ void TextEditor::Render()
 			ImVec2 lineStartScreenPos = ImVec2(cursorScreenPos.x, cursorScreenPos.y + lineNo * mCharAdvance.y);
 			ImVec2 textScreenPos = ImVec2(lineStartScreenPos.x + mTextStart, lineStartScreenPos.y);
 
-			auto &line = mLines[lineNo];
-			longest = std::max(mTextStart + TextDistanceToLineStart(Coordinates(lineNo, GetLineMaxColumn(lineNo))), longest);
+			auto & line = mLines[lineNo];
+			longest = std::max(mTextStart + TextDistanceToLineStart(Coordinates(lineNo, (int)line.size())), longest);
 			auto columnNo = 0;
 			Coordinates lineStartCoord(lineNo, 0);
-			Coordinates lineEndCoord(lineNo, GetLineMaxColumn(lineNo));
+			Coordinates lineEndCoord(lineNo, (int)line.size());
 
 			// Draw selection for the current line
 			float sstart = -1.0f;
@@ -949,55 +817,40 @@ void TextEditor::Render()
 			}
 
 			// Draw line number (right aligned)
-			snprintf(buf, 16, "%d  ", lineNo + 1);
+			if (mShowLineNumbers) {
+				snprintf(buf, 16, "%d  ", lineNo + 1);
 
-			auto lineNoWidth = ImGui::GetFont()->CalcTextSizeA(ImGui::GetFontSize(), FLT_MAX, -1.0f, buf, nullptr, nullptr).x;
-			drawList->AddText(ImVec2(lineStartScreenPos.x + mTextStart - lineNoWidth, lineStartScreenPos.y), mPalette[(int)PaletteIndex::LineNumber], buf);
+				auto lineNoWidth = ImGui::GetFont()->CalcTextSizeA(ImGui::GetFontSize(), FLT_MAX, -1.0f, buf, nullptr, nullptr).x;
+				drawList->AddText(ImVec2(lineStartScreenPos.x + mTextStart - lineNoWidth, lineStartScreenPos.y), mPalette[(int)PaletteIndex::LineNumber], buf);
+			}
 
+			// Highlight the current line (where the cursor is)
 			if (mState.mCursorPosition.mLine == lineNo)
 			{
 				auto focused = ImGui::IsWindowFocused();
 
-				// Highlight the current line (where the cursor is)
-				if (!HasSelection())
+				if (!HasSelection() && mHighlightLine)
 				{
 					auto end = ImVec2(start.x + contentSize.x + scrollX, start.y + mCharAdvance.y);
 					drawList->AddRectFilled(start, end, mPalette[(int)(focused ? PaletteIndex::CurrentLineFill : PaletteIndex::CurrentLineFillInactive)]);
 					drawList->AddRect(start, end, mPalette[(int)PaletteIndex::CurrentLineEdge], 1.0f);
 				}
 
-				// Render the cursor
+				float cx = TextDistanceToLineStart(mState.mCursorPosition);
+
 				if (focused)
 				{
-					auto timeEnd = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-					auto elapsed = timeEnd - mStartTime;
+					static auto timeStart = std::chrono::system_clock::now();
+					auto timeEnd = std::chrono::system_clock::now();
+					auto diff = timeEnd - timeStart;
+					auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(diff).count();
 					if (elapsed > 400)
 					{
-						float width = 1.0f;
-						auto cindex = GetCharacterIndex(mState.mCursorPosition);
-						float cx = TextDistanceToLineStart(mState.mCursorPosition);
-
-						if (mOverwrite && cindex < (int)line.size())
-						{
-							auto c = line[cindex].mChar;
-							if (c == '\t')
-							{
-								auto x = (1.0f + std::floor((1.0f + cx) / (float(mTabSize) * spaceSize))) * (float(mTabSize) * spaceSize);
-								width = x - cx;
-							}
-							else
-							{
-								char buf2[2];
-								buf2[0] = line[cindex].mChar;
-								buf2[1] = '\0';
-								width = ImGui::GetFont()->CalcTextSizeA(ImGui::GetFontSize(), FLT_MAX, -1.0f, buf2).x;
-							}
-						}
 						ImVec2 cstart(textScreenPos.x + cx, lineStartScreenPos.y);
-						ImVec2 cend(textScreenPos.x + cx + width, lineStartScreenPos.y + mCharAdvance.y);
+						ImVec2 cend(textScreenPos.x + cx + (mOverwrite ? mCharAdvance.x : 1.0f), lineStartScreenPos.y + mCharAdvance.y);
 						drawList->AddRectFilled(cstart, cend, mPalette[(int)PaletteIndex::Cursor]);
 						if (elapsed > 800)
-							mStartTime = timeEnd;
+							timeStart = timeEnd;
 					}
 				}
 			}
@@ -1006,87 +859,32 @@ void TextEditor::Render()
 			auto prevColor = line.empty() ? mPalette[(int)PaletteIndex::Default] : GetGlyphColor(line[0]);
 			ImVec2 bufferOffset;
 
-			for (int i = 0; i < line.size();)
+			for (auto& glyph : line)
 			{
-				auto &glyph = line[i];
 				auto color = GetGlyphColor(glyph);
 
-				if ((color != prevColor || glyph.mChar == '\t' || glyph.mChar == ' ') && !mLineBuffer.empty())
+				if ((color != prevColor || glyph.mChar == '\t') && !buffer.empty())
 				{
 					const ImVec2 newOffset(textScreenPos.x + bufferOffset.x, textScreenPos.y + bufferOffset.y);
-					drawList->AddText(newOffset, prevColor, mLineBuffer.c_str());
-					auto textSize = ImGui::GetFont()->CalcTextSizeA(ImGui::GetFontSize(), FLT_MAX, -1.0f, mLineBuffer.c_str(), nullptr, nullptr);
+					drawList->AddText(newOffset, prevColor, buffer.c_str());
+					auto textSize = ImGui::GetFont()->CalcTextSizeA(ImGui::GetFontSize(), FLT_MAX, -1.0f, buffer.c_str(), nullptr, nullptr);
 					bufferOffset.x += textSize.x;
-					mLineBuffer.clear();
+					buffer.clear();
 				}
 				prevColor = color;
 
 				if (glyph.mChar == '\t')
-				{
-					auto oldX = bufferOffset.x;
-					bufferOffset.x = (1.0f + std::floor((1.0f + bufferOffset.x) / (float(mTabSize) * spaceSize))) * (float(mTabSize) * spaceSize);
-					++i;
-
-					if (mShowWhitespaces)
-					{
-						ImVec2 p1, p2, p3, p4;
-
-						if (mShowShortTabGlyphs)
-						{
-							const auto s = ImGui::GetFontSize();
-							const auto x1 = textScreenPos.x + oldX + 1.0f;
-							const auto x2 = textScreenPos.x + oldX + mCharAdvance.x - 1.0f;
-							const auto y = textScreenPos.y + bufferOffset.y + s * 0.5f;
-
-							p1 = ImVec2(x1, y);
-							p2 = ImVec2(x2, y);
-							p3 = ImVec2(x2 - s * 0.16f, y - s * 0.16f);
-							p4 = ImVec2(x2 - s * 0.16f, y + s * 0.16f);
-						}
-						else
-						{
-							const auto s = ImGui::GetFontSize();
-							const auto x1 = textScreenPos.x + oldX + 1.0f;
-							const auto x2 = textScreenPos.x + bufferOffset.x - 1.0f;
-							const auto y = textScreenPos.y + bufferOffset.y + s * 0.5f;
-
-							p1 = ImVec2(x1, y);
-							p2 = ImVec2(x2, y);
-							p3 = ImVec2(x2 - s * 0.2f, y - s * 0.2f);
-							p4 = ImVec2(x2 - s * 0.2f, y + s * 0.2f);
-						}
-
-						drawList->AddLine(p1, p2, 0x90909090);
-						drawList->AddLine(p2, p3, 0x90909090);
-						drawList->AddLine(p2, p4, 0x90909090);
-					}
-				}
-				else if (glyph.mChar == ' ')
-				{
-					if (mShowWhitespaces)
-					{
-						const auto s = ImGui::GetFontSize();
-						const auto x = textScreenPos.x + bufferOffset.x + spaceSize * 0.5f;
-						const auto y = textScreenPos.y + bufferOffset.y + s * 0.5f;
-						drawList->AddCircleFilled(ImVec2(x, y), 1.5f, 0x80808080, 4);
-					}
-					bufferOffset.x += spaceSize;
-					i++;
-				}
+					bufferOffset.x = (1.0f * fontScale + std::floor((1.0f + bufferOffset.x)) / (float(mTabSize) * spaceSize)) * (float(mTabSize) * spaceSize);
 				else
-				{
-					auto l = UTF8CharLength(glyph.mChar);
-					while (l-- > 0)
-						mLineBuffer.push_back(line[i++].mChar);
-				}
+					AppendBuffer(buffer, glyph.mChar, 0);
 				++columnNo;
 			}
 
-			if (!mLineBuffer.empty())
+			if (!buffer.empty())
 			{
 				const ImVec2 newOffset(textScreenPos.x + bufferOffset.x, textScreenPos.y + bufferOffset.y);
-				drawList->AddText(newOffset, prevColor, mLineBuffer.c_str());
-				mLineBuffer.clear();
+				drawList->AddText(newOffset, prevColor, buffer.c_str());
+				buffer.clear();
 			}
 
 			++lineNo;
@@ -1095,37 +893,30 @@ void TextEditor::Render()
 		// Draw a tooltip on known identifiers/preprocessor symbols
 		if (ImGui::IsMousePosValid())
 		{
-			auto mpos = ImGui::GetMousePos();
-			ImVec2 origin = ImGui::GetCursorScreenPos();
-			ImVec2 local(mpos.x - origin.x, mpos.y - origin.y);
-			// printf("Mouse: pos(%g, %g), origin(%g, %g), local(%g, %g)\n", mpos.x, mpos.y, origin.x, origin.y, local.x, local.y);
-			if (local.x >= mTextStart)
+			auto id = GetWordAt(ScreenPosToCoordinates(ImGui::GetMousePos()));
+			if (!id.empty())
 			{
-				auto pos = ScreenPosToCoordinates(mpos);
-				auto id = GetWordAt(pos);
-				if (!id.empty())
+				auto it = mLanguageDefinition.mIdentifiers.find(id);
+				if (it != mLanguageDefinition.mIdentifiers.end())
 				{
-					auto it = mLanguageDefinition.mIdentifiers.find(id);
-					if (it != mLanguageDefinition.mIdentifiers.end())
+					ImGui::BeginTooltip();
+					ImGui::TextUnformatted(it->second.mDeclaration.c_str());
+					ImGui::EndTooltip();
+				}
+				else
+				{
+					auto pi = mLanguageDefinition.mPreprocIdentifiers.find(id);
+					if (pi != mLanguageDefinition.mPreprocIdentifiers.end())
 					{
 						ImGui::BeginTooltip();
-						ImGui::TextUnformatted(it->second.mDeclaration.c_str());
+						ImGui::TextUnformatted(pi->second.mDeclaration.c_str());
 						ImGui::EndTooltip();
-					}
-					else
-					{
-						auto pi = mLanguageDefinition.mPreprocIdentifiers.find(id);
-						if (pi != mLanguageDefinition.mPreprocIdentifiers.end())
-						{
-							ImGui::BeginTooltip();
-							ImGui::TextUnformatted(pi->second.mDeclaration.c_str());
-							ImGui::EndTooltip();
-						}
 					}
 				}
 			}
 		}
 	}
+
 
 	ImGui::Dummy(ImVec2((longest + 2), mLines.size() * mCharAdvance.y));
 
@@ -1135,9 +926,57 @@ void TextEditor::Render()
 		ImGui::SetWindowFocus();
 		mScrollToCursor = false;
 	}
+
+	// suggestions window
+	if (mACOpened) {
+		auto acCoord = mACPosition;
+		acCoord.mColumn++;
+		// TODO: Give each component a different fort?
+
+		// ImFont* font = ImGui::GetFont();
+		// ImGui::PopFont();
+
+		ImGui::SetNextWindowPos(CoordinatesToScreenPos(acCoord), ImGuiCond_Always);
+		ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::GetStyle().Colors[ImGuiCol_WindowBg]);
+		ImGui::BeginChild("##texteditor_autocompl", ImVec2(150, 100), true);
+
+		for (int i = 0; i < mACSuggestions.size(); i++) {
+			ImGui::Selectable(mACSuggestions[i].c_str(), i == mACIndex);
+			if (i == mACIndex)
+				ImGui::SetScrollHereY();
+		}
+
+		ImGui::EndChild();
+		ImGui::PopStyleColor();
+
+		// ImGui::PushFont(font);
+
+		ImGui::SetWindowFocus();
+		if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Escape)))
+			mACOpened = false;
+	}
 }
 
-void TextEditor::Render(const char *aTitle, const ImVec2 &aSize, bool aBorder)
+ImVec2 TextEditor::CoordinatesToScreenPos(const TextEditor::Coordinates& aPosition) const
+{
+	ImVec2 origin = ImGui::GetCursorScreenPos();
+	int dist = 0;
+
+	auto& line = mLines[aPosition.mLine];
+	for (int i = 0; i < std::min(line.size(), (size_t)aPosition.mColumn); i++) {
+		if (line[i].mChar == '\t')
+			dist += mTabSize;
+		else dist++;
+	}
+
+
+	int retY = origin.y + aPosition.mLine * mCharAdvance.y;
+	int retX = origin.x + GetTextStart() * mCharAdvance.x + dist * mCharAdvance.x - ImGui::GetScrollX();
+
+	return ImVec2(retX, retY);
+}
+
+void TextEditor::Render(const char* aTitle, const ImVec2& aSize, bool aBorder)
 {
 	mWithinRender = true;
 	mTextChanged = false;
@@ -1145,34 +984,23 @@ void TextEditor::Render(const char *aTitle, const ImVec2 &aSize, bool aBorder)
 
 	ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::ColorConvertU32ToFloat4(mPalette[(int)PaletteIndex::Background]));
 	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
-	if (!mIgnoreImGuiChild)
-		ImGui::BeginChild(aTitle, aSize, aBorder, ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoMove);
+	ImGui::BeginChild(aTitle, aSize, aBorder, (ImGuiWindowFlags_HorizontalScrollbar * mHorizontalScroll) | ImGuiWindowFlags_NoMove);
+	ImGui::PushAllowKeyboardFocus(true);
 
-	if (mHandleKeyboardInputs)
-	{
-		HandleKeyboardInputs();
-		ImGui::PushAllowKeyboardFocus(true);
-	}
-
-	if (mHandleMouseInputs)
-		HandleMouseInputs();
-
+	HandleKeyboardInputs();
+	HandleMouseInputs();
 	ColorizeInternal();
 	Render();
 
-	if (mHandleKeyboardInputs)
-		ImGui::PopAllowKeyboardFocus();
-
-	if (!mIgnoreImGuiChild)
-		ImGui::EndChild();
-
+	ImGui::PopAllowKeyboardFocus();
+	ImGui::EndChild();
 	ImGui::PopStyleVar();
 	ImGui::PopStyleColor();
 
 	mWithinRender = false;
 }
 
-void TextEditor::SetText(const std::string &aText)
+void TextEditor::SetText(const std::string & aText)
 {
 	mLines.clear();
 	mLines.emplace_back(Line());
@@ -1199,7 +1027,7 @@ void TextEditor::SetText(const std::string &aText)
 	Colorize();
 }
 
-void TextEditor::SetTextLines(const std::vector<std::string> &aLines)
+void TextEditor::SetTextLines(const std::vector<std::string> & aLines)
 {
 	mLines.clear();
 
@@ -1213,7 +1041,7 @@ void TextEditor::SetTextLines(const std::vector<std::string> &aLines)
 
 		for (size_t i = 0; i < aLines.size(); ++i)
 		{
-			const std::string &aLine = aLines[i];
+			const std::string & aLine = aLines[i];
 
 			mLines[i].reserve(aLine.size());
 			for (size_t j = 0; j < aLine.size(); ++j)
@@ -1230,7 +1058,7 @@ void TextEditor::SetTextLines(const std::vector<std::string> &aLines)
 	Colorize();
 }
 
-void TextEditor::EnterCharacter(ImWchar aChar, bool aShift)
+void TextEditor::EnterCharacter(Char aChar, bool aShift)
 {
 	assert(!mReadOnly);
 
@@ -1240,25 +1068,23 @@ void TextEditor::EnterCharacter(ImWchar aChar, bool aShift)
 
 	if (HasSelection())
 	{
-		if (aChar == '\t' && mState.mSelectionStart.mLine != mState.mSelectionEnd.mLine)
+		if (aChar == '\t')
 		{
-
 			auto start = mState.mSelectionStart;
 			auto end = mState.mSelectionEnd;
-			auto originalEnd = end;
 
 			if (start > end)
 				std::swap(start, end);
 			start.mColumn = 0;
 			//			end.mColumn = end.mLine < mLines.size() ? mLines[end.mLine].size() : 0;
 			if (end.mColumn == 0 && end.mLine > 0)
+			{
 				--end.mLine;
-			if (end.mLine >= (int)mLines.size())
-				end.mLine = mLines.empty() ? 0 : (int)mLines.size() - 1;
-			end.mColumn = GetLineMaxColumn(end.mLine);
+				end.mColumn = (int)mLines[end.mLine].size();
+			}
 
-			// if (end.mColumn >= GetLineMaxColumn(end.mLine))
-			//	end.mColumn = GetLineMaxColumn(end.mLine) - 1;
+			if (end.mColumn >= (int)mLines[end.mLine].size())
+				end.mColumn = (int)mLines[end.mLine].size() - 1;
 
 			u.mRemovedStart = start;
 			u.mRemovedEnd = end;
@@ -1268,65 +1094,55 @@ void TextEditor::EnterCharacter(ImWchar aChar, bool aShift)
 
 			for (int i = start.mLine; i <= end.mLine; i++)
 			{
-				auto &line = mLines[i];
+				auto& line = mLines[i];
 				if (aShift)
 				{
-					if (!line.empty())
+					if (line.empty() == false)
 					{
 						if (line.front().mChar == '\t')
 						{
 							line.erase(line.begin());
+							if (i == end.mLine && end.mColumn > 0)
+								end.mColumn--;
 							modified = true;
 						}
-						else
+					}
+					else
+					{
+						for (int j = 0; j < mTabSize && line.empty() == false && line.front().mChar == ' '; j++)
 						{
-							for (int j = 0; j < mTabSize && !line.empty() && line.front().mChar == ' '; j++)
-							{
-								line.erase(line.begin());
-								modified = true;
-							}
+							line.erase(line.begin());
+							if (i == end.mLine && end.mColumn > 0)
+								end.mColumn--;
+							modified = true;
 						}
 					}
 				}
 				else
 				{
 					line.insert(line.begin(), Glyph('\t', TextEditor::PaletteIndex::Background));
+					if (i == end.mLine)
+						++end.mColumn;
 					modified = true;
 				}
 			}
 
 			if (modified)
 			{
-				start = Coordinates(start.mLine, GetCharacterColumn(start.mLine, 0));
-				Coordinates rangeEnd;
-				if (originalEnd.mColumn != 0)
-				{
-					end = Coordinates(end.mLine, GetLineMaxColumn(end.mLine));
-					rangeEnd = end;
-					u.mAdded = GetText(start, end);
-				}
-				else
-				{
-					end = Coordinates(originalEnd.mLine, 0);
-					rangeEnd = Coordinates(end.mLine - 1, GetLineMaxColumn(end.mLine - 1));
-					u.mAdded = GetText(start, rangeEnd);
-				}
-
+				assert(mLines.size() > start.mLine && mLines[start.mLine].size() > start.mColumn);
+				assert(mLines.size() > end.mLine && mLines[end.mLine].size() > end.mColumn);
 				u.mAddedStart = start;
-				u.mAddedEnd = rangeEnd;
-				u.mAfter = mState;
-
-				mState.mSelectionStart = start;
-				mState.mSelectionEnd = end;
-				AddUndo(u);
+				u.mAddedEnd = end;
+				u.mAdded = GetText(start, end);
 
 				mTextChanged = true;
 
+				AddUndo(u);
 				EnsureCursorVisible();
 			}
 
 			return;
-		} // c == '\t'
+		}
 		else
 		{
 			u.mRemoved = GetSelectedText();
@@ -1334,66 +1150,44 @@ void TextEditor::EnterCharacter(ImWchar aChar, bool aShift)
 			u.mRemovedEnd = mState.mSelectionEnd;
 			DeleteSelection();
 		}
-	} // HasSelection
+	}
 
 	auto coord = GetActualCursorCoordinates();
 	u.mAddedStart = coord;
 
-	assert(!mLines.empty());
+	if (mLines.empty())
+		mLines.push_back(Line());
 
 	if (aChar == '\n')
 	{
 		InsertLine(coord.mLine + 1);
-		auto &line = mLines[coord.mLine];
-		auto &newLine = mLines[coord.mLine + 1];
+		auto& line = mLines[coord.mLine];
+		auto& newLine = mLines[coord.mLine + 1];
 
-		if (mLanguageDefinition.mAutoIndentation)
-			for (size_t it = 0; it < line.size() && isascii(line[it].mChar) && isblank(line[it].mChar); ++it)
+		if (mLanguageDefinition.mAutoIndentation && mSmartIndent)
+		{
+			for (size_t it = 0; it < line.size() && isblank(line[it].mChar); ++it)
 				newLine.push_back(line[it]);
+		}
 
 		const size_t whitespaceSize = newLine.size();
-		auto cindex = GetCharacterIndex(coord);
-		newLine.insert(newLine.end(), line.begin() + cindex, line.end());
-		line.erase(line.begin() + cindex, line.begin() + line.size());
-		SetCursorPosition(Coordinates(coord.mLine + 1, GetCharacterColumn(coord.mLine + 1, (int)whitespaceSize)));
-		u.mAdded = (char)aChar;
+		newLine.insert(newLine.end(), line.begin() + coord.mColumn, line.end());
+		line.erase(line.begin() + coord.mColumn, line.begin() + line.size());
+		SetCursorPosition(Coordinates(coord.mLine + 1, (int)whitespaceSize));
 	}
 	else
 	{
-		char buf[7];
-		int e = ImTextCharToUtf8(buf, 7, aChar);
-		if (e > 0)
-		{
-			buf[e] = '\0';
-			auto &line = mLines[coord.mLine];
-			auto cindex = GetCharacterIndex(coord);
-
-			if (mOverwrite && cindex < (int)line.size())
-			{
-				auto d = UTF8CharLength(line[cindex].mChar);
-
-				u.mRemovedStart = mState.mCursorPosition;
-				u.mRemovedEnd = Coordinates(coord.mLine, GetCharacterColumn(coord.mLine, cindex + d));
-
-				while (d-- > 0 && cindex < (int)line.size())
-				{
-					u.mRemoved += line[cindex].mChar;
-					line.erase(line.begin() + cindex);
-				}
-			}
-
-			for (auto p = buf; *p != '\0'; p++, ++cindex)
-				line.insert(line.begin() + cindex, Glyph(*p, PaletteIndex::Default));
-			u.mAdded = buf;
-
-			SetCursorPosition(Coordinates(coord.mLine, GetCharacterColumn(coord.mLine, cindex)));
-		}
+		auto& line = mLines[coord.mLine];
+		if (mOverwrite && (int)line.size() > coord.mColumn)
+			line[coord.mColumn] = Glyph(aChar, PaletteIndex::Default);
 		else
-			return;
+			line.insert(line.begin() + coord.mColumn, Glyph(aChar, PaletteIndex::Default));
+		SetCursorPosition(Coordinates(coord.mLine, coord.mColumn + 1));
 	}
 
 	mTextChanged = true;
 
+	u.mAdded = aChar;
 	u.mAddedEnd = GetActualCursorCoordinates();
 	u.mAfter = mState;
 
@@ -1401,6 +1195,20 @@ void TextEditor::EnterCharacter(ImWchar aChar, bool aShift)
 
 	Colorize(coord.mLine - 1, 3);
 	EnsureCursorVisible();
+
+	// auto brace completion
+	if (mCompleteBraces) {
+		if (aChar == '{') {
+			EnterCharacter('\n', false);
+			EnterCharacter('}', false);
+		} else if (aChar == '(')
+			EnterCharacter(')', false);
+		else if (aChar == '[')
+			EnterCharacter(']', false);
+
+		if (aChar == '{' || aChar == '(' || aChar == '[')
+			mState.mCursorPosition.mColumn--;
+	}
 }
 
 void TextEditor::SetReadOnly(bool aValue)
@@ -1408,12 +1216,7 @@ void TextEditor::SetReadOnly(bool aValue)
 	mReadOnly = aValue;
 }
 
-void TextEditor::SetColorizerEnable(bool aValue)
-{
-	mColorizerEnabled = aValue;
-}
-
-void TextEditor::SetCursorPosition(const Coordinates &aPosition)
+void TextEditor::SetCursorPosition(const Coordinates & aPosition)
 {
 	if (mState.mCursorPosition != aPosition)
 	{
@@ -1423,28 +1226,28 @@ void TextEditor::SetCursorPosition(const Coordinates &aPosition)
 	}
 }
 
-void TextEditor::SetSelectionStart(const Coordinates &aPosition)
+void TextEditor::SetSelectionStart(const Coordinates & aPosition)
 {
 	mState.mSelectionStart = SanitizeCoordinates(aPosition);
 	if (mState.mSelectionStart > mState.mSelectionEnd)
 		std::swap(mState.mSelectionStart, mState.mSelectionEnd);
 }
 
-void TextEditor::SetSelectionEnd(const Coordinates &aPosition)
+void TextEditor::SetSelectionEnd(const Coordinates & aPosition)
 {
 	mState.mSelectionEnd = SanitizeCoordinates(aPosition);
 	if (mState.mSelectionStart > mState.mSelectionEnd)
 		std::swap(mState.mSelectionStart, mState.mSelectionEnd);
 }
 
-void TextEditor::SetSelection(const Coordinates &aStart, const Coordinates &aEnd, SelectionMode aMode)
+void TextEditor::SetSelection(const Coordinates & aStart, const Coordinates & aEnd, SelectionMode aMode)
 {
 	auto oldSelStart = mState.mSelectionStart;
 	auto oldSelEnd = mState.mSelectionEnd;
 
 	mState.mSelectionStart = SanitizeCoordinates(aStart);
 	mState.mSelectionEnd = SanitizeCoordinates(aEnd);
-	if (mState.mSelectionStart > mState.mSelectionEnd)
+	if (aStart > aEnd)
 		std::swap(mState.mSelectionStart, mState.mSelectionEnd);
 
 	switch (aMode)
@@ -1463,7 +1266,7 @@ void TextEditor::SetSelection(const Coordinates &aStart, const Coordinates &aEnd
 		const auto lineNo = mState.mSelectionEnd.mLine;
 		const auto lineSize = (size_t)lineNo < mLines.size() ? mLines[lineNo].size() : 0;
 		mState.mSelectionStart = Coordinates(mState.mSelectionStart.mLine, 0);
-		mState.mSelectionEnd = Coordinates(lineNo, GetLineMaxColumn(lineNo));
+		mState.mSelectionEnd = Coordinates(lineNo, (int)lineSize);
 		break;
 	}
 	default:
@@ -1475,23 +1278,18 @@ void TextEditor::SetSelection(const Coordinates &aStart, const Coordinates &aEnd
 		mCursorPositionChanged = true;
 }
 
-void TextEditor::SetTabSize(int aValue)
-{
-	mTabSize = std::max(0, std::min(32, aValue));
-}
-
-void TextEditor::InsertText(const std::string &aValue)
+void TextEditor::InsertText(const std::string & aValue)
 {
 	InsertText(aValue.c_str());
 }
 
-void TextEditor::InsertText(const char *aValue)
+void TextEditor::InsertText(const char * aValue)
 {
 	if (aValue == nullptr)
 		return;
 
 	auto pos = GetActualCursorCoordinates();
-	auto start = std::min(pos, mState.mSelectionStart);
+	auto start = std::min<Coordinates>(pos, mState.mSelectionStart);
 	int totalLines = pos.mLine - start.mLine;
 
 	totalLines += InsertTextAt(pos, aValue);
@@ -1518,7 +1316,7 @@ void TextEditor::DeleteSelection()
 void TextEditor::MoveUp(int aAmount, bool aSelect)
 {
 	auto oldPos = mState.mCursorPosition;
-	mState.mCursorPosition.mLine = std::max(0, mState.mCursorPosition.mLine - aAmount);
+	mState.mCursorPosition.mLine = std::max<int>(0, mState.mCursorPosition.mLine - aAmount);
 	if (oldPos != mState.mCursorPosition)
 	{
 		if (aSelect)
@@ -1545,7 +1343,7 @@ void TextEditor::MoveDown(int aAmount, bool aSelect)
 {
 	assert(mState.mCursorPosition.mColumn >= 0);
 	auto oldPos = mState.mCursorPosition;
-	mState.mCursorPosition.mLine = std::max(0, std::min((int)mLines.size() - 1, mState.mCursorPosition.mLine + aAmount));
+	mState.mCursorPosition.mLine = std::max<int>(0, std::min<int>((int)mLines.size() - 1, mState.mCursorPosition.mLine + aAmount));
 
 	if (mState.mCursorPosition != oldPos)
 	{
@@ -1569,11 +1367,6 @@ void TextEditor::MoveDown(int aAmount, bool aSelect)
 	}
 }
 
-static bool IsUTFSequence(char c)
-{
-	return (c & 0xC0) == 0x80;
-}
-
 void TextEditor::MoveLeft(int aAmount, bool aSelect, bool aWordMode)
 {
 	if (mLines.empty())
@@ -1581,44 +1374,24 @@ void TextEditor::MoveLeft(int aAmount, bool aSelect, bool aWordMode)
 
 	auto oldPos = mState.mCursorPosition;
 	mState.mCursorPosition = GetActualCursorCoordinates();
-	auto line = mState.mCursorPosition.mLine;
-	auto cindex = GetCharacterIndex(mState.mCursorPosition);
 
 	while (aAmount-- > 0)
 	{
-		if (cindex == 0)
+		if (mState.mCursorPosition.mColumn == 0)
 		{
-			if (line > 0)
+			if (mState.mCursorPosition.mLine > 0)
 			{
-				--line;
-				if ((int)mLines.size() > line)
-					cindex = (int)mLines[line].size();
-				else
-					cindex = 0;
+				--mState.mCursorPosition.mLine;
+				mState.mCursorPosition.mColumn = (int)mLines[mState.mCursorPosition.mLine].size();
 			}
 		}
 		else
 		{
-			--cindex;
-			if (cindex > 0)
-			{
-				if ((int)mLines.size() > line)
-				{
-					while (cindex > 0 && IsUTFSequence(mLines[line][cindex].mChar))
-						--cindex;
-				}
-			}
-		}
-
-		mState.mCursorPosition = Coordinates(line, GetCharacterColumn(line, cindex));
-		if (aWordMode)
-		{
-			mState.mCursorPosition = FindWordStart(mState.mCursorPosition);
-			cindex = GetCharacterIndex(mState.mCursorPosition);
+			mState.mCursorPosition.mColumn = std::max(0, mState.mCursorPosition.mColumn - 1);
+			if (aWordMode)
+				mState.mCursorPosition = FindWordStart(mState.mCursorPosition);
 		}
 	}
-
-	mState.mCursorPosition = Coordinates(line, GetCharacterColumn(line, cindex));
 
 	assert(mState.mCursorPosition.mColumn >= 0);
 	if (aSelect)
@@ -1644,31 +1417,25 @@ void TextEditor::MoveRight(int aAmount, bool aSelect, bool aWordMode)
 {
 	auto oldPos = mState.mCursorPosition;
 
-	if (mLines.empty() || oldPos.mLine >= mLines.size())
+	if (mLines.empty())
 		return;
 
-	auto cindex = GetCharacterIndex(mState.mCursorPosition);
 	while (aAmount-- > 0)
 	{
-		auto lindex = mState.mCursorPosition.mLine;
-		auto &line = mLines[lindex];
-
-		if (cindex >= line.size())
+		auto& line = mLines[mState.mCursorPosition.mLine];
+		if (mState.mCursorPosition.mColumn >= (int)line.size())
 		{
-			if (mState.mCursorPosition.mLine < mLines.size() - 1)
+			if (mState.mCursorPosition.mLine < (int)mLines.size() - 1)
 			{
-				mState.mCursorPosition.mLine = std::max(0, std::min((int)mLines.size() - 1, mState.mCursorPosition.mLine + 1));
+				mState.mCursorPosition.mLine = std::max<int>(0, std::min<int>((int)mLines.size() - 1, mState.mCursorPosition.mLine + 1));
 				mState.mCursorPosition.mColumn = 0;
 			}
-			else
-				return;
 		}
 		else
 		{
-			cindex += UTF8CharLength(line[cindex].mChar);
-			mState.mCursorPosition = Coordinates(lindex, GetCharacterColumn(lindex, cindex));
+			mState.mCursorPosition.mColumn = std::max<int>(0, std::min<int>((int)line.size(), mState.mCursorPosition.mColumn + 1));
 			if (aWordMode)
-				mState.mCursorPosition = FindNextWord(mState.mCursorPosition);
+				mState.mCursorPosition = FindWordEnd(mState.mCursorPosition);
 		}
 	}
 
@@ -1709,7 +1476,7 @@ void TextEditor::MoveTop(bool aSelect)
 	}
 }
 
-void TextEditor::TextEditor::MoveBottom(bool aSelect)
+void TextEditor::MoveBottom(bool aSelect)
 {
 	auto oldPos = GetCursorPosition();
 	auto newPos = Coordinates((int)mLines.size() - 1, 0);
@@ -1752,7 +1519,7 @@ void TextEditor::MoveHome(bool aSelect)
 void TextEditor::MoveEnd(bool aSelect)
 {
 	auto oldPos = mState.mCursorPosition;
-	SetCursorPosition(Coordinates(mState.mCursorPosition.mLine, GetLineMaxColumn(oldPos.mLine)));
+	SetCursorPosition(Coordinates(mState.mCursorPosition.mLine, (int)mLines[oldPos.mLine].size()));
 
 	if (mState.mCursorPosition != oldPos)
 	{
@@ -1796,9 +1563,9 @@ void TextEditor::Delete()
 	{
 		auto pos = GetActualCursorCoordinates();
 		SetCursorPosition(pos);
-		auto &line = mLines[pos.mLine];
+		auto& line = mLines[pos.mLine];
 
-		if (pos.mColumn == GetLineMaxColumn(pos.mLine))
+		if (pos.mColumn == (int)line.size())
 		{
 			if (pos.mLine == (int)mLines.size() - 1)
 				return;
@@ -1807,20 +1574,17 @@ void TextEditor::Delete()
 			u.mRemovedStart = u.mRemovedEnd = GetActualCursorCoordinates();
 			Advance(u.mRemovedEnd);
 
-			auto &nextLine = mLines[pos.mLine + 1];
+			auto& nextLine = mLines[pos.mLine + 1];
 			line.insert(line.end(), nextLine.begin(), nextLine.end());
 			RemoveLine(pos.mLine + 1);
 		}
 		else
 		{
-			auto cindex = GetCharacterIndex(pos);
+			u.mRemoved = line[pos.mColumn].mChar;
 			u.mRemovedStart = u.mRemovedEnd = GetActualCursorCoordinates();
 			u.mRemovedEnd.mColumn++;
-			u.mRemoved = GetText(u.mRemovedStart, u.mRemovedEnd);
 
-			auto d = UTF8CharLength(line[cindex].mChar);
-			while (d-- > 0 && cindex < (int)line.size())
-				line.erase(line.begin() + cindex);
+			line.erase(line.begin() + pos.mColumn);
 		}
 
 		mTextChanged = true;
@@ -1832,7 +1596,7 @@ void TextEditor::Delete()
 	AddUndo(u);
 }
 
-void TextEditor::Backspace()
+void TextEditor::BackSpace()
 {
 	assert(!mReadOnly);
 
@@ -1861,16 +1625,16 @@ void TextEditor::Backspace()
 				return;
 
 			u.mRemoved = '\n';
-			u.mRemovedStart = u.mRemovedEnd = Coordinates(pos.mLine - 1, GetLineMaxColumn(pos.mLine - 1));
+			u.mRemovedStart = u.mRemovedEnd = Coordinates(pos.mLine - 1, (int)mLines[pos.mLine - 1].size());
 			Advance(u.mRemovedEnd);
 
-			auto &line = mLines[mState.mCursorPosition.mLine];
-			auto &prevLine = mLines[mState.mCursorPosition.mLine - 1];
-			auto prevSize = GetLineMaxColumn(mState.mCursorPosition.mLine - 1);
+			auto& line = mLines[mState.mCursorPosition.mLine];
+			auto& prevLine = mLines[mState.mCursorPosition.mLine - 1];
+			auto prevSize = (int)prevLine.size();
 			prevLine.insert(prevLine.end(), line.begin(), line.end());
 
 			ErrorMarkers etmp;
-			for (auto &i : mErrorMarkers)
+			for (auto& i : mErrorMarkers)
 				etmp.insert(ErrorMarkers::value_type(i.first - 1 == mState.mCursorPosition.mLine ? i.first - 1 : i.first, i.second));
 			mErrorMarkers = std::move(etmp);
 
@@ -1880,28 +1644,22 @@ void TextEditor::Backspace()
 		}
 		else
 		{
-			auto &line = mLines[mState.mCursorPosition.mLine];
-			auto cindex = GetCharacterIndex(pos) - 1;
-			auto cend = cindex + 1;
-			while (cindex > 0 && IsUTFSequence(line[cindex].mChar))
-				--cindex;
+			auto& line = mLines[mState.mCursorPosition.mLine];
 
-			// if (cindex > 0 && UTF8CharLength(line[cindex].mChar) > 1)
-			//	--cindex;
+			if (mCompleteBraces && pos.mColumn < line.size()) {
+				if ((line[pos.mColumn - 1].mChar == '(' && line[pos.mColumn].mChar == ')') ||
+					(line[pos.mColumn - 1].mChar == '{' && line[pos.mColumn].mChar == '}') ||
+					(line[pos.mColumn - 1].mChar == '[' && line[pos.mColumn].mChar == ']'))
+					Delete();
+			}
 
+			u.mRemoved = line[pos.mColumn - 1].mChar;
 			u.mRemovedStart = u.mRemovedEnd = GetActualCursorCoordinates();
 			--u.mRemovedStart.mColumn;
 
-			if (line[cindex].mChar == '\t')
-				mState.mCursorPosition.mColumn -= mTabSize;
-			else
-				--mState.mCursorPosition.mColumn;
-
-			while (cindex < line.size() && cend-- > cindex)
-			{
-				u.mRemoved += line[cindex].mChar;
-				line.erase(line.begin() + cindex);
-			}
+			--mState.mCursorPosition.mColumn;
+			if (mState.mCursorPosition.mColumn < (int)line.size())
+				line.erase(line.begin() + mState.mCursorPosition.mColumn);
 		}
 
 		mTextChanged = true;
@@ -1941,8 +1699,8 @@ void TextEditor::Copy()
 		if (!mLines.empty())
 		{
 			std::string str;
-			auto &line = mLines[GetActualCursorCoordinates().mLine];
-			for (auto &g : line)
+			auto& line = mLines[GetActualCursorCoordinates().mLine];
+			for (auto& g : line)
 				str.push_back(g.mChar);
 			ImGui::SetClipboardText(str.c_str());
 		}
@@ -1976,9 +1734,6 @@ void TextEditor::Cut()
 
 void TextEditor::Paste()
 {
-	if (IsReadOnly())
-		return;
-
 	auto clipText = ImGui::GetClipboardText();
 	if (clipText != nullptr && strlen(clipText) > 0)
 	{
@@ -2006,12 +1761,12 @@ void TextEditor::Paste()
 
 bool TextEditor::CanUndo() const
 {
-	return !mReadOnly && mUndoIndex > 0;
+	return mUndoIndex > 0;
 }
 
 bool TextEditor::CanRedo() const
 {
-	return !mReadOnly && mUndoIndex < (int)mUndoBuffer.size();
+	return mUndoIndex < (int)mUndoBuffer.size();
 }
 
 void TextEditor::Undo(int aSteps)
@@ -2026,16 +1781,16 @@ void TextEditor::Redo(int aSteps)
 		mUndoBuffer[mUndoIndex++].Redo(this);
 }
 
-const TextEditor::Palette &TextEditor::GetDarkPalette()
+const TextEditor::Palette & TextEditor::GetDarkPalette()
 {
-	const static Palette p = {{
-		0xff7f7f7f, // Default
-		0xffd69c56, // Keyword
-		0xff00ff00, // Number
-		0xff7070e0, // String
+	const static Palette p = { {
+		0xff7f7f7f,	// Default
+		0xffd69c56,	// Keyword
+		0xff00ff00,	// Number
+		0xff7070e0,	// String
 		0xff70a0e0, // Char literal
 		0xffffffff, // Punctuation
-		0xff408080, // Preprocessor
+		0xff408080,	// Preprocessor
 		0xffaaaaaa, // Identifier
 		0xff9bc64d, // Known identifier
 		0xffc040a0, // Preproc identifier
@@ -2050,20 +1805,20 @@ const TextEditor::Palette &TextEditor::GetDarkPalette()
 		0x40000000, // Current line fill
 		0x40808080, // Current line fill (inactive)
 		0x40a0a0a0, // Current line edge
-	}};
+	} };
 	return p;
 }
 
-const TextEditor::Palette &TextEditor::GetLightPalette()
+const TextEditor::Palette & TextEditor::GetLightPalette()
 {
-	const static Palette p = {{
-		0xff7f7f7f, // None
-		0xffff0c06, // Keyword
-		0xff008000, // Number
-		0xff2020a0, // String
+	const static Palette p = { {
+		0xff7f7f7f,	// None
+		0xffff0c06,	// Keyword
+		0xff008000,	// Number
+		0xff2020a0,	// String
 		0xff304070, // Char literal
 		0xff000000, // Punctuation
-		0xff406060, // Preprocessor
+		0xff406060,	// Preprocessor
 		0xff404040, // Identifier
 		0xff606010, // Known identifier
 		0xffc040a0, // Preproc identifier
@@ -2078,20 +1833,20 @@ const TextEditor::Palette &TextEditor::GetLightPalette()
 		0x40000000, // Current line fill
 		0x40808080, // Current line fill (inactive)
 		0x40000000, // Current line edge
-	}};
+	} };
 	return p;
 }
 
-const TextEditor::Palette &TextEditor::GetRetroBluePalette()
+const TextEditor::Palette & TextEditor::GetRetroBluePalette()
 {
-	const static Palette p = {{
-		0xff00ffff, // None
-		0xffffff00, // Keyword
-		0xff00ff00, // Number
-		0xff808000, // String
+	const static Palette p = { {
+		0xff00ffff,	// None
+		0xffffff00,	// Keyword
+		0xff00ff00,	// Number
+		0xff808000,	// String
 		0xff808000, // Char literal
 		0xffffffff, // Punctuation
-		0xff008000, // Preprocessor
+		0xff008000,	// Preprocessor
 		0xff00ffff, // Identifier
 		0xffffffff, // Known identifier
 		0xffff00ff, // Preproc identifier
@@ -2106,15 +1861,14 @@ const TextEditor::Palette &TextEditor::GetRetroBluePalette()
 		0x40000000, // Current line fill
 		0x40808080, // Current line fill (inactive)
 		0x40000000, // Current line edge
-	}};
+	} };
 	return p;
 }
 
+
 std::string TextEditor::GetText() const
 {
-	auto lastLine = (int)mLines.size() - 1;
-	auto lastLineLength = GetLineMaxColumn(lastLine);
-	return GetText(Coordinates(), Coordinates(lastLine, lastLineLength));
+	return GetText(Coordinates(), Coordinates((int)mLines.size(), 0));
 }
 
 std::vector<std::string> TextEditor::GetTextLines() const
@@ -2123,7 +1877,7 @@ std::vector<std::string> TextEditor::GetTextLines() const
 
 	result.reserve(mLines.size());
 
-	for (auto &line : mLines)
+	for (auto & line : mLines)
 	{
 		std::string text;
 
@@ -2143,12 +1897,10 @@ std::string TextEditor::GetSelectedText() const
 	return GetText(mState.mSelectionStart, mState.mSelectionEnd);
 }
 
-std::string TextEditor::GetCurrentLineText() const
+std::string TextEditor::GetCurrentLineText()const
 {
-	auto lineLength = GetLineMaxColumn(mState.mCursorPosition.mLine);
-	return GetText(
-		Coordinates(mState.mCursorPosition.mLine, 0),
-		Coordinates(mState.mCursorPosition.mLine, lineLength));
+	auto lineLength = (int)mLines[mState.mCursorPosition.mLine].size();
+	return GetText(Coordinates(mState.mCursorPosition.mLine, 0), Coordinates(mState.mCursorPosition.mLine, lineLength));
 }
 
 void TextEditor::ProcessInputs()
@@ -2157,11 +1909,11 @@ void TextEditor::ProcessInputs()
 
 void TextEditor::Colorize(int aFromLine, int aLines)
 {
-	int toLine = aLines == -1 ? (int)mLines.size() : std::min((int)mLines.size(), aFromLine + aLines);
-	mColorRangeMin = std::min(mColorRangeMin, aFromLine);
-	mColorRangeMax = std::max(mColorRangeMax, toLine);
-	mColorRangeMin = std::max(0, mColorRangeMin);
-	mColorRangeMax = std::max(mColorRangeMin, mColorRangeMax);
+	int toLine = aLines == -1 ? (int)mLines.size() : std::min<int>((int)mLines.size(), aFromLine + aLines);
+	mColorRangeMin = std::min<int>(mColorRangeMin, aFromLine);
+	mColorRangeMax = std::max<int>(mColorRangeMax, toLine);
+	mColorRangeMin = std::max<int>(0, mColorRangeMin);
+	mColorRangeMax = std::max<int>(mColorRangeMin, mColorRangeMax);
 	mCheckComments = true;
 }
 
@@ -2177,7 +1929,7 @@ void TextEditor::ColorizeRange(int aFromLine, int aToLine)
 	int endLine = std::max(0, std::min((int)mLines.size(), aToLine));
 	for (int i = aFromLine; i < endLine; ++i)
 	{
-		auto &line = mLines[i];
+		auto& line = mLines[i];
 
 		if (line.empty())
 			continue;
@@ -2185,20 +1937,20 @@ void TextEditor::ColorizeRange(int aFromLine, int aToLine)
 		buffer.resize(line.size());
 		for (size_t j = 0; j < line.size(); ++j)
 		{
-			auto &col = line[j];
+			auto& col = line[j];
 			buffer[j] = col.mChar;
 			col.mColorIndex = PaletteIndex::Default;
 		}
 
-		const char *bufferBegin = &buffer.front();
-		const char *bufferEnd = bufferBegin + buffer.size();
+		const char* bufferBegin = &buffer.front();
+		const char* bufferEnd = bufferBegin + buffer.size();
 
 		auto last = bufferEnd;
 
-		for (auto first = bufferBegin; first != last;)
+		for (auto first = bufferBegin; first != last; )
 		{
-			const char *token_begin = nullptr;
-			const char *token_end = nullptr;
+			const char* token_begin = nullptr;
+			const char* token_end = nullptr;
 			PaletteIndex token_color = PaletteIndex::Default;
 
 			bool hasTokenizeResult = false;
@@ -2212,15 +1964,15 @@ void TextEditor::ColorizeRange(int aFromLine, int aToLine)
 			if (hasTokenizeResult == false)
 			{
 				// todo : remove
-				// printf("using regex for %.*s\n", first + 10 < last ? 10 : int(last - first), first);
+					//printf("using regex for %.*s\n", first + 10 < last ? 10 : int(last - first), first);
 
-				for (auto &p : mRegexList)
+				for (auto& p : mRegexList)
 				{
 					if (std::regex_search(first, last, results, p.first, std::regex_constants::match_continuous))
 					{
 						hasTokenizeResult = true;
 
-						auto &v = *results.begin();
+						auto& v = *results.begin();
 						token_begin = v.first;
 						token_end = v.second;
 						token_color = p.second;
@@ -2272,27 +2024,24 @@ void TextEditor::ColorizeRange(int aFromLine, int aToLine)
 
 void TextEditor::ColorizeInternal()
 {
-	if (mLines.empty() || !mColorizerEnabled)
+	if (mLines.empty())
 		return;
 
 	if (mCheckComments)
 	{
-		auto endLine = mLines.size();
-		auto endIndex = 0;
-		auto commentStartLine = endLine;
-		auto commentStartIndex = endIndex;
+		auto end = Coordinates((int)mLines.size(), 0);
+		auto commentStart = end;
 		auto withinString = false;
 		auto withinSingleLineComment = false;
 		auto withinPreproc = false;
-		auto firstChar = true;	  // there is no other non-whitespace characters in the line before
-		auto concatenate = false; // '\' on the very end of the line
-		auto currentLine = 0;
-		auto currentIndex = 0;
-		while (currentLine < endLine || currentIndex < endIndex)
-		{
-			auto &line = mLines[currentLine];
+		auto firstChar = true;			// there is no other non-whitespace characters in the line before
+		auto concatenate = false;		// '\' on the very end of the line
 
-			if (currentIndex == 0 && !concatenate)
+		for (auto currentCoord = Coordinates(0, 0); currentCoord < end; Advance(currentCoord))
+		{
+			auto& line = mLines[currentCoord.mLine];
+
+			if (currentCoord.mColumn == 0 && !concatenate)
 			{
 				withinSingleLineComment = false;
 				withinPreproc = false;
@@ -2303,37 +2052,37 @@ void TextEditor::ColorizeInternal()
 
 			if (!line.empty())
 			{
-				auto &g = line[currentIndex];
+				auto& g = line[currentCoord.mColumn];
 				auto c = g.mChar;
 
 				if (c != mLanguageDefinition.mPreprocChar && !isspace(c))
 					firstChar = false;
 
-				if (currentIndex == (int)line.size() - 1 && line[line.size() - 1].mChar == '\\')
+				if (currentCoord.mColumn == line.size() - 1 && line[line.size() - 1].mChar == '\\')
 					concatenate = true;
 
-				bool inComment = (commentStartLine < currentLine || (commentStartLine == currentLine && commentStartIndex <= currentIndex));
+				bool inComment = commentStart <= currentCoord;
 
 				if (withinString)
 				{
-					line[currentIndex].mMultiLineComment = inComment;
+					line[currentCoord.mColumn].mMultiLineComment = inComment;
 
 					if (c == '\"')
 					{
-						if (currentIndex + 1 < (int)line.size() && line[currentIndex + 1].mChar == '\"')
+						if (currentCoord.mColumn + 1 < (int)line.size() && line[currentCoord.mColumn + 1].mChar == '\"')
 						{
-							currentIndex += 1;
-							if (currentIndex < (int)line.size())
-								line[currentIndex].mMultiLineComment = inComment;
+							Advance(currentCoord);
+							if (currentCoord.mColumn < (int)line.size())
+								line[currentCoord.mColumn].mMultiLineComment = inComment;
 						}
 						else
 							withinString = false;
 					}
 					else if (c == '\\')
 					{
-						currentIndex += 1;
-						if (currentIndex < (int)line.size())
-							line[currentIndex].mMultiLineComment = inComment;
+						Advance(currentCoord);
+						if (currentCoord.mColumn < (int)line.size())
+							line[currentCoord.mColumn].mMultiLineComment = inComment;
 					}
 				}
 				else
@@ -2344,55 +2093,34 @@ void TextEditor::ColorizeInternal()
 					if (c == '\"')
 					{
 						withinString = true;
-						line[currentIndex].mMultiLineComment = inComment;
+						line[currentCoord.mColumn].mMultiLineComment = inComment;
 					}
 					else
 					{
-						auto pred = [](const char &a, const Glyph &b)
-						{ return a == b.mChar; };
-						auto from = line.begin() + currentIndex;
-						auto &startStr = mLanguageDefinition.mCommentStart;
-						auto &singleStartStr = mLanguageDefinition.mSingleLineComment;
-
-						if (!withinSingleLineComment && currentIndex + startStr.size() <= line.size() &&
-							equals(startStr.begin(), startStr.end(), from, from + startStr.size(), pred))
-						{
-							commentStartLine = currentLine;
-							commentStartIndex = currentIndex;
-						}
-						else if (singleStartStr.size() > 0 &&
-								 currentIndex + singleStartStr.size() <= line.size() &&
-								 equals(singleStartStr.begin(), singleStartStr.end(), from, from + singleStartStr.size(), pred))
-						{
+						auto pred = [](const char& a, const Glyph& b) { return a == b.mChar; };
+						auto from = line.begin() + currentCoord.mColumn;
+						auto& startStr = mLanguageDefinition.mCommentStart;
+						auto& singleStartStr = mLanguageDefinition.mSingleLineComment;
+						if (singleStartStr.size() > 0 &&
+							currentCoord.mColumn + singleStartStr.size() <= line.size() &&
+							equals(singleStartStr.begin(), singleStartStr.end(), from, from + singleStartStr.size(), pred))
 							withinSingleLineComment = true;
-						}
+						else if (!withinSingleLineComment && currentCoord.mColumn + startStr.size() <= line.size() &&
+							equals(startStr.begin(), startStr.end(), from, from + startStr.size(), pred))
+							commentStart = currentCoord;
 
-						inComment = inComment = (commentStartLine < currentLine || (commentStartLine == currentLine && commentStartIndex <= currentIndex));
+						inComment = commentStart <= currentCoord;
 
-						line[currentIndex].mMultiLineComment = inComment;
-						line[currentIndex].mComment = withinSingleLineComment;
+						line[currentCoord.mColumn].mMultiLineComment = inComment;
+						line[currentCoord.mColumn].mComment = withinSingleLineComment;
 
-						auto &endStr = mLanguageDefinition.mCommentEnd;
-						if (currentIndex + 1 >= (int)endStr.size() &&
+						auto& endStr = mLanguageDefinition.mCommentEnd;
+						if (currentCoord.mColumn + 1 >= (int)endStr.size() &&
 							equals(endStr.begin(), endStr.end(), from + 1 - endStr.size(), from + 1, pred))
-						{
-							commentStartIndex = endIndex;
-							commentStartLine = endLine;
-						}
+							commentStart = end;
 					}
 				}
-				line[currentIndex].mPreprocessor = withinPreproc;
-				currentIndex += UTF8CharLength(c);
-				if (currentIndex >= (int)line.size())
-				{
-					currentIndex = 0;
-					++currentLine;
-				}
-			}
-			else
-			{
-				currentIndex = 0;
-				++currentLine;
+				line[currentCoord.mColumn].mPreprocessor = withinPreproc;
 			}
 		}
 		mCheckComments = false;
@@ -2414,28 +2142,23 @@ void TextEditor::ColorizeInternal()
 	}
 }
 
-float TextEditor::TextDistanceToLineStart(const Coordinates &aFrom) const
+float TextEditor::TextDistanceToLineStart(const Coordinates& aFrom) const
 {
-	auto &line = mLines[aFrom.mLine];
+	auto& line = mLines[aFrom.mLine];
 	float distance = 0.0f;
+	auto fontScale = ImGui::GetFontSize() / ImGui::GetFont()->FontSize;
 	float spaceSize = ImGui::GetFont()->CalcTextSizeA(ImGui::GetFontSize(), FLT_MAX, -1.0f, " ", nullptr, nullptr).x;
-	int colIndex = GetCharacterIndex(aFrom);
-	for (size_t it = 0u; it < line.size() && it < colIndex;)
+	for (size_t it = 0u; it < line.size() && it < (unsigned)aFrom.mColumn; ++it)
 	{
 		if (line[it].mChar == '\t')
 		{
-			distance = (1.0f + std::floor((1.0f + distance) / (float(mTabSize) * spaceSize))) * (float(mTabSize) * spaceSize);
-			++it;
+			distance = (1.0f * fontScale + std::floor((1.0f + distance)) / (float(mTabSize) * spaceSize)) * (float(mTabSize) * spaceSize);
 		}
 		else
 		{
-			auto d = UTF8CharLength(line[it].mChar);
-			char tempCString[7];
-			int i = 0;
-			for (; i < 6 && d-- > 0 && it < (int)line.size(); i++, it++)
-				tempCString[i] = line[it].mChar;
-
-			tempCString[i] = '\0';
+			char tempCString[2];
+			tempCString[0] = line[it].mChar;
+			tempCString[1] = '\0';
 			distance += ImGui::GetFont()->CalcTextSizeA(ImGui::GetFontSize(), FLT_MAX, -1.0f, tempCString, nullptr, nullptr).x;
 		}
 	}
@@ -2483,21 +2206,28 @@ int TextEditor::GetPageSize() const
 }
 
 TextEditor::UndoRecord::UndoRecord(
-	const std::string &aAdded,
+	const std::string& aAdded,
 	const TextEditor::Coordinates aAddedStart,
 	const TextEditor::Coordinates aAddedEnd,
-	const std::string &aRemoved,
+	const std::string& aRemoved,
 	const TextEditor::Coordinates aRemovedStart,
 	const TextEditor::Coordinates aRemovedEnd,
-	TextEditor::EditorState &aBefore,
-	TextEditor::EditorState &aAfter)
-	: mAdded(aAdded), mAddedStart(aAddedStart), mAddedEnd(aAddedEnd), mRemoved(aRemoved), mRemovedStart(aRemovedStart), mRemovedEnd(aRemovedEnd), mBefore(aBefore), mAfter(aAfter)
+	TextEditor::EditorState& aBefore,
+	TextEditor::EditorState& aAfter)
+	: mAdded(aAdded)
+	, mAddedStart(aAddedStart)
+	, mAddedEnd(aAddedEnd)
+	, mRemoved(aRemoved)
+	, mRemovedStart(aRemovedStart)
+	, mRemovedEnd(aRemovedEnd)
+	, mBefore(aBefore)
+	, mAfter(aAfter)
 {
 	assert(mAddedStart <= mAddedEnd);
 	assert(mRemovedStart <= mRemovedEnd);
 }
 
-void TextEditor::UndoRecord::Undo(TextEditor *aEditor)
+void TextEditor::UndoRecord::Undo(TextEditor * aEditor)
 {
 	if (!mAdded.empty())
 	{
@@ -2514,9 +2244,10 @@ void TextEditor::UndoRecord::Undo(TextEditor *aEditor)
 
 	aEditor->mState = mBefore;
 	aEditor->EnsureCursorVisible();
+
 }
 
-void TextEditor::UndoRecord::Redo(TextEditor *aEditor)
+void TextEditor::UndoRecord::Redo(TextEditor * aEditor)
 {
 	if (!mRemoved.empty())
 	{
@@ -2535,9 +2266,9 @@ void TextEditor::UndoRecord::Redo(TextEditor *aEditor)
 	aEditor->EnsureCursorVisible();
 }
 
-static bool TokenizeCStyleString(const char *in_begin, const char *in_end, const char *&out_begin, const char *&out_end)
+static bool TokenizeCStyleString(const char* in_begin, const char* in_end, const char*& out_begin, const char*& out_end)
 {
-	const char *p = in_begin;
+	const char* p = in_begin;
 
 	if (*p == '"')
 	{
@@ -2564,9 +2295,9 @@ static bool TokenizeCStyleString(const char *in_begin, const char *in_end, const
 	return false;
 }
 
-static bool TokenizeCStyleCharacterLiteral(const char *in_begin, const char *in_end, const char *&out_begin, const char *&out_end)
+static bool TokenizeCStyleCharacterLiteral(const char* in_begin, const char* in_end, const char*& out_begin, const char*& out_end)
 {
-	const char *p = in_begin;
+	const char* p = in_begin;
 
 	if (*p == '\'')
 	{
@@ -2591,9 +2322,9 @@ static bool TokenizeCStyleCharacterLiteral(const char *in_begin, const char *in_
 	return false;
 }
 
-static bool TokenizeCStyleIdentifier(const char *in_begin, const char *in_end, const char *&out_begin, const char *&out_end)
+static bool TokenizeCStyleIdentifier(const char* in_begin, const char* in_end, const char*& out_begin, const char*& out_end)
 {
-	const char *p = in_begin;
+	const char* p = in_begin;
 
 	if ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || *p == '_')
 	{
@@ -2610,9 +2341,9 @@ static bool TokenizeCStyleIdentifier(const char *in_begin, const char *in_end, c
 	return false;
 }
 
-static bool TokenizeCStyleNumber(const char *in_begin, const char *in_end, const char *&out_begin, const char *&out_end)
+static bool TokenizeCStyleNumber(const char* in_begin, const char* in_end, const char*& out_begin, const char*& out_end)
 {
-	const char *p = in_begin;
+	const char* p = in_begin;
 
 	const bool startsWithNumber = *p >= '0' && *p <= '9';
 
@@ -2714,7 +2445,7 @@ static bool TokenizeCStyleNumber(const char *in_begin, const char *in_end, const
 	return true;
 }
 
-static bool TokenizeCStylePunctuation(const char *in_begin, const char *in_end, const char *&out_begin, const char *&out_end)
+static bool TokenizeCStylePunctuation(const char * in_begin, const char * in_end, const char *& out_begin, const char *& out_end)
 {
 	(void)in_end;
 
@@ -2752,208 +2483,39 @@ static bool TokenizeCStylePunctuation(const char *in_begin, const char *in_end, 
 	return false;
 }
 
-static bool TokenizeLuaStyleString(const char *in_begin, const char *in_end, const char *&out_begin, const char *&out_end)
-{
-	const char *p = in_begin;
-
-	bool is_single_quote = false;
-	bool is_double_quotes = false;
-	bool is_double_square_brackets = false;
-
-	switch (*p)
-	{
-	case '\'':
-		is_single_quote = true;
-		break;
-	case '"':
-		is_double_quotes = true;
-		break;
-	case '[':
-		p++;
-		if (p < in_end && *(p) == '[')
-			is_double_square_brackets = true;
-		break;
-	}
-
-	if (is_single_quote || is_double_quotes || is_double_square_brackets)
-	{
-		p++;
-
-		while (p < in_end)
-		{
-			// handle end of string
-			if ((is_single_quote && *p == '\'') || (is_double_quotes && *p == '"') || (is_double_square_brackets && *p == ']' && p + 1 < in_end && *(p + 1) == ']'))
-			{
-				out_begin = in_begin;
-
-				if (is_double_square_brackets)
-					out_end = p + 2;
-				else
-					out_end = p + 1;
-
-				return true;
-			}
-
-			// handle escape character for "
-			if (*p == '\\' && p + 1 < in_end && (is_single_quote || is_double_quotes))
-				p++;
-
-			p++;
-		}
-	}
-
-	return false;
-}
-
-static bool TokenizeLuaStyleIdentifier(const char *in_begin, const char *in_end, const char *&out_begin, const char *&out_end)
-{
-	const char *p = in_begin;
-
-	if ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || *p == '_')
-	{
-		p++;
-
-		while ((p < in_end) && ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || (*p >= '0' && *p <= '9') || *p == '_'))
-			p++;
-
-		out_begin = in_begin;
-		out_end = p;
-		return true;
-	}
-
-	return false;
-}
-
-static bool TokenizeLuaStyleNumber(const char *in_begin, const char *in_end, const char *&out_begin, const char *&out_end)
-{
-	const char *p = in_begin;
-
-	const bool startsWithNumber = *p >= '0' && *p <= '9';
-
-	if (*p != '+' && *p != '-' && !startsWithNumber)
-		return false;
-
-	p++;
-
-	bool hasNumber = startsWithNumber;
-
-	while (p < in_end && (*p >= '0' && *p <= '9'))
-	{
-		hasNumber = true;
-
-		p++;
-	}
-
-	if (hasNumber == false)
-		return false;
-
-	if (p < in_end)
-	{
-		if (*p == '.')
-		{
-			p++;
-
-			while (p < in_end && (*p >= '0' && *p <= '9'))
-				p++;
-		}
-
-		// floating point exponent
-		if (p < in_end && (*p == 'e' || *p == 'E'))
-		{
-			p++;
-
-			if (p < in_end && (*p == '+' || *p == '-'))
-				p++;
-
-			bool hasDigits = false;
-
-			while (p < in_end && (*p >= '0' && *p <= '9'))
-			{
-				hasDigits = true;
-
-				p++;
-			}
-
-			if (hasDigits == false)
-				return false;
-		}
-	}
-
-	out_begin = in_begin;
-	out_end = p;
-	return true;
-}
-
-static bool TokenizeLuaStylePunctuation(const char *in_begin, const char *in_end, const char *&out_begin, const char *&out_end)
-{
-	(void)in_end;
-
-	switch (*in_begin)
-	{
-	case '[':
-	case ']':
-	case '{':
-	case '}':
-	case '!':
-	case '%':
-	case '#':
-	case '^':
-	case '&':
-	case '*':
-	case '(':
-	case ')':
-	case '-':
-	case '+':
-	case '=':
-	case '~':
-	case '|':
-	case '<':
-	case '>':
-	case '?':
-	case ':':
-	case '/':
-	case ';':
-	case ',':
-	case '.':
-		out_begin = in_begin;
-		out_end = in_begin + 1;
-		return true;
-	}
-
-	return false;
-}
-
-const TextEditor::LanguageDefinition &TextEditor::LanguageDefinition::CPlusPlus()
+const TextEditor::LanguageDefinition& TextEditor::LanguageDefinition::CPlusPlus()
 {
 	static bool inited = false;
 	static LanguageDefinition langDef;
 	if (!inited)
 	{
-		static const char *const cppKeywords[] = {
+		static const char* const cppKeywords[] = {
 			"alignas", "alignof", "and", "and_eq", "asm", "atomic_cancel", "atomic_commit", "atomic_noexcept", "auto", "bitand", "bitor", "bool", "break", "case", "catch", "char", "char16_t", "char32_t", "class",
 			"compl", "concept", "const", "constexpr", "const_cast", "continue", "decltype", "default", "delete", "do", "double", "dynamic_cast", "else", "enum", "explicit", "export", "extern", "false", "float",
 			"for", "friend", "goto", "if", "import", "inline", "int", "long", "module", "mutable", "namespace", "new", "noexcept", "not", "not_eq", "nullptr", "operator", "or", "or_eq", "private", "protected", "public",
 			"register", "reinterpret_cast", "requires", "return", "short", "signed", "sizeof", "static", "static_assert", "static_cast", "struct", "switch", "synchronized", "template", "this", "thread_local",
-			"throw", "true", "try", "typedef", "typeid", "typename", "union", "unsigned", "using", "virtual", "void", "volatile", "wchar_t", "while", "xor", "xor_eq"};
-		for (auto &k : cppKeywords)
+			"throw", "true", "try", "typedef", "typeid", "typename", "union", "unsigned", "using", "virtual", "void", "volatile", "wchar_t", "while", "xor", "xor_eq"
+		};
+		for (auto& k : cppKeywords)
 			langDef.mKeywords.insert(k);
 
-		static const char *const identifiers[] = {
+		static const char* const identifiers[] = {
 			"abort", "abs", "acos", "asin", "atan", "atexit", "atof", "atoi", "atol", "ceil", "clock", "cosh", "ctime", "div", "exit", "fabs", "floor", "fmod", "getchar", "getenv", "isalnum", "isalpha", "isdigit", "isgraph",
 			"ispunct", "isspace", "isupper", "kbhit", "log10", "log2", "log", "memcmp", "modf", "pow", "printf", "sprintf", "snprintf", "putchar", "putenv", "puts", "rand", "remove", "rename", "sinh", "sqrt", "srand", "strcat", "strcmp", "strerror", "time", "tolower", "toupper",
-			"std", "string", "vector", "map", "unordered_map", "set", "unordered_set", "min", "max"};
-		for (auto &k : identifiers)
+			"std", "string", "vector", "map", "unordered_map", "set", "unordered_set", "min", "max"
+		};
+		for (auto& k : identifiers)
 		{
 			Identifier id;
 			id.mDeclaration = "Built-in function";
 			langDef.mIdentifiers.insert(std::make_pair(std::string(k), id));
 		}
 
-		langDef.mTokenize = [](const char *in_begin, const char *in_end, const char *&out_begin, const char *&out_end, PaletteIndex &paletteIndex) -> bool
+		langDef.mTokenize = [](const char * in_begin, const char * in_end, const char *& out_begin, const char *& out_end, PaletteIndex & paletteIndex) -> bool
 		{
 			paletteIndex = PaletteIndex::Max;
 
-			while (in_begin < in_end && isascii(*in_begin) && isblank(*in_begin))
+			while (in_begin < in_end && isblank(*in_begin))
 				in_begin++;
 
 			if (in_begin == in_end)
@@ -2990,224 +2552,33 @@ const TextEditor::LanguageDefinition &TextEditor::LanguageDefinition::CPlusPlus(
 	return langDef;
 }
 
-const TextEditor::LanguageDefinition &TextEditor::LanguageDefinition::HLSL()
+const TextEditor::LanguageDefinition& TextEditor::LanguageDefinition::HLSL()
 {
 	static bool inited = false;
 	static LanguageDefinition langDef;
 	if (!inited)
 	{
-		static const char *const keywords[] = {
-			"AppendStructuredBuffer",
-			"asm",
-			"asm_fragment",
-			"BlendState",
-			"bool",
-			"break",
-			"Buffer",
-			"ByteAddressBuffer",
-			"case",
-			"cbuffer",
-			"centroid",
-			"class",
-			"column_major",
-			"compile",
-			"compile_fragment",
-			"CompileShader",
-			"const",
-			"continue",
-			"ComputeShader",
-			"ConsumeStructuredBuffer",
-			"default",
-			"DepthStencilState",
-			"DepthStencilView",
-			"discard",
-			"do",
-			"double",
-			"DomainShader",
-			"dword",
-			"else",
-			"export",
-			"extern",
-			"false",
-			"float",
-			"for",
-			"fxgroup",
-			"GeometryShader",
-			"groupshared",
-			"half",
-			"Hullshader",
-			"if",
-			"in",
-			"inline",
-			"inout",
-			"InputPatch",
-			"int",
-			"interface",
-			"line",
-			"lineadj",
-			"linear",
-			"LineStream",
-			"matrix",
-			"min16float",
-			"min10float",
-			"min16int",
-			"min12int",
-			"min16uint",
-			"namespace",
-			"nointerpolation",
-			"noperspective",
-			"NULL",
-			"out",
-			"OutputPatch",
-			"packoffset",
-			"pass",
-			"pixelfragment",
-			"PixelShader",
-			"point",
-			"PointStream",
-			"precise",
-			"RasterizerState",
-			"RenderTargetView",
-			"return",
-			"register",
-			"row_major",
-			"RWBuffer",
-			"RWByteAddressBuffer",
-			"RWStructuredBuffer",
-			"RWTexture1D",
-			"RWTexture1DArray",
-			"RWTexture2D",
-			"RWTexture2DArray",
-			"RWTexture3D",
-			"sample",
-			"sampler",
-			"SamplerState",
-			"SamplerComparisonState",
-			"shared",
-			"snorm",
-			"stateblock",
-			"stateblock_state",
-			"static",
-			"string",
-			"struct",
-			"switch",
-			"StructuredBuffer",
-			"tbuffer",
-			"technique",
-			"technique10",
-			"technique11",
-			"texture",
-			"Texture1D",
-			"Texture1DArray",
-			"Texture2D",
-			"Texture2DArray",
-			"Texture2DMS",
-			"Texture2DMSArray",
-			"Texture3D",
-			"TextureCube",
-			"TextureCubeArray",
-			"true",
-			"typedef",
-			"triangle",
-			"triangleadj",
-			"TriangleStream",
-			"uint",
-			"uniform",
-			"unorm",
-			"unsigned",
-			"vector",
-			"vertexfragment",
-			"VertexShader",
-			"void",
-			"volatile",
-			"while",
-			"bool1",
-			"bool2",
-			"bool3",
-			"bool4",
-			"double1",
-			"double2",
-			"double3",
-			"double4",
-			"float1",
-			"float2",
-			"float3",
-			"float4",
-			"int1",
-			"int2",
-			"int3",
-			"int4",
-			"in",
-			"out",
-			"inout",
-			"uint1",
-			"uint2",
-			"uint3",
-			"uint4",
-			"dword1",
-			"dword2",
-			"dword3",
-			"dword4",
-			"half1",
-			"half2",
-			"half3",
-			"half4",
-			"float1x1",
-			"float2x1",
-			"float3x1",
-			"float4x1",
-			"float1x2",
-			"float2x2",
-			"float3x2",
-			"float4x2",
-			"float1x3",
-			"float2x3",
-			"float3x3",
-			"float4x3",
-			"float1x4",
-			"float2x4",
-			"float3x4",
-			"float4x4",
-			"half1x1",
-			"half2x1",
-			"half3x1",
-			"half4x1",
-			"half1x2",
-			"half2x2",
-			"half3x2",
-			"half4x2",
-			"half1x3",
-			"half2x3",
-			"half3x3",
-			"half4x3",
-			"half1x4",
-			"half2x4",
-			"half3x4",
-			"half4x4",
+		static const char* const keywords[] = {
+			"AppendStructuredBuffer", "asm", "asm_fragment", "BlendState", "bool", "break", "Buffer", "ByteAddressBuffer", "case", "cbuffer", "centroid", "class", "column_major", "compile", "compile_fragment",
+			"CompileShader", "const", "continue", "ComputeShader", "ConsumeStructuredBuffer", "default", "DepthStencilState", "DepthStencilView", "discard", "do", "double", "DomainShader", "dword", "else",
+			"export", "extern", "false", "float", "for", "fxgroup", "GeometryShader", "groupshared", "half", "Hullshader", "if", "in", "inline", "inout", "InputPatch", "int", "interface", "line", "lineadj",
+			"linear", "LineStream", "matrix", "min16float", "min10float", "min16int", "min12int", "min16uint", "namespace", "nointerpolation", "noperspective", "NULL", "out", "OutputPatch", "packoffset",
+			"pass", "pixelfragment", "PixelShader", "point", "PointStream", "precise", "RasterizerState", "RenderTargetView", "return", "register", "row_major", "RWBuffer", "RWByteAddressBuffer", "RWStructuredBuffer",
+			"RWTexture1D", "RWTexture1DArray", "RWTexture2D", "RWTexture2DArray", "RWTexture3D", "sample", "sampler", "SamplerState", "SamplerComparisonState", "shared", "snorm", "stateblock", "stateblock_state",
+			"static", "string", "struct", "switch", "StructuredBuffer", "tbuffer", "technique", "technique10", "technique11", "texture", "Texture1D", "Texture1DArray", "Texture2D", "Texture2DArray", "Texture2DMS",
+			"Texture2DMSArray", "Texture3D", "TextureCube", "TextureCubeArray", "true", "typedef", "triangle", "triangleadj", "TriangleStream", "uint", "uniform", "unorm", "unsigned", "vector", "vertexfragment",
+			"VertexShader", "void", "volatile", "while",
+			"bool1","bool2","bool3","bool4","double1","double2","double3","double4", "float1", "float2", "float3", "float4", "int1", "int2", "int3", "int4", "in", "out", "inout",
+			"uint1", "uint2", "uint3", "uint4", "dword1", "dword2", "dword3", "dword4", "half1", "half2", "half3", "half4",
+			"float1x1","float2x1","float3x1","float4x1","float1x2","float2x2","float3x2","float4x2",
+			"float1x3","float2x3","float3x3","float4x3","float1x4","float2x4","float3x4","float4x4",
+			"half1x1","half2x1","half3x1","half4x1","half1x2","half2x2","half3x2","half4x2",
+			"half1x3","half2x3","half3x3","half4x3","half1x4","half2x4","half3x4","half4x4"
 		};
-		for (auto &k : keywords)
+		for (auto& k : keywords)
 			langDef.mKeywords.insert(k);
 
-		static const char *const identifiers[] = {
-			"abort", "abs", "acos", "all", "AllMemoryBarrier", "AllMemoryBarrierWithGroupSync", "any", "asdouble", "asfloat", "asin", "asint", "asint", "asuint",
-			"asuint", "atan", "atan2", "ceil", "CheckAccessFullyMapped", "clamp", "clip", "cos", "cosh", "countbits", "cross", "D3DCOLORtoUBYTE4", "ddx",
-			"ddx_coarse", "ddx_fine", "ddy", "ddy_coarse", "ddy_fine", "degrees", "determinant", "DeviceMemoryBarrier", "DeviceMemoryBarrierWithGroupSync",
-			"distance", "dot", "dst", "errorf", "EvaluateAttributeAtCentroid", "EvaluateAttributeAtSample", "EvaluateAttributeSnapped", "exp", "exp2",
-			"f16tof32", "f32tof16", "faceforward", "firstbithigh", "firstbitlow", "floor", "fma", "fmod", "frac", "frexp", "fwidth", "GetRenderTargetSampleCount",
-			"GetRenderTargetSamplePosition", "GroupMemoryBarrier", "GroupMemoryBarrierWithGroupSync", "InterlockedAdd", "InterlockedAnd", "InterlockedCompareExchange",
-			"InterlockedCompareStore", "InterlockedExchange", "InterlockedMax", "InterlockedMin", "InterlockedOr", "InterlockedXor", "isfinite", "isinf", "isnan",
-			"ldexp", "length", "lerp", "lit", "log", "log10", "log2", "mad", "max", "min", "modf", "msad4", "mul", "noise", "normalize", "pow", "printf",
-			"Process2DQuadTessFactorsAvg", "Process2DQuadTessFactorsMax", "Process2DQuadTessFactorsMin", "ProcessIsolineTessFactors", "ProcessQuadTessFactorsAvg",
-			"ProcessQuadTessFactorsMax", "ProcessQuadTessFactorsMin", "ProcessTriTessFactorsAvg", "ProcessTriTessFactorsMax", "ProcessTriTessFactorsMin",
-			"radians", "rcp", "reflect", "refract", "reversebits", "round", "rsqrt", "saturate", "sign", "sin", "sincos", "sinh", "smoothstep", "sqrt", "step",
-			"tan", "tanh", "tex1D", "tex1D", "tex1Dbias", "tex1Dgrad", "tex1Dlod", "tex1Dproj", "tex2D", "tex2D", "tex2Dbias", "tex2Dgrad", "tex2Dlod", "tex2Dproj",
-			"tex3D", "tex3D", "tex3Dbias", "tex3Dgrad", "tex3Dlod", "tex3Dproj", "texCUBE", "texCUBE", "texCUBEbias", "texCUBEgrad", "texCUBElod", "texCUBEproj", "transpose", "trunc"};
-		for (auto &k : identifiers)
-		{
-			Identifier id;
-			id.mDeclaration = "Built-in function";
-			langDef.mIdentifiers.insert(std::make_pair(std::string(k), id));
-		}
+		m_HLSLDocumentation(langDef.mIdentifiers);
 
 		langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[ \\t]*#[ \\t]*[a-zA-Z_]+", PaletteIndex::Preprocessor));
 		langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("L?\\\"(\\\\.|[^\\\"])*\\\"", PaletteIndex::String));
@@ -3232,29 +2603,174 @@ const TextEditor::LanguageDefinition &TextEditor::LanguageDefinition::HLSL()
 	}
 	return langDef;
 }
+void TextEditor::LanguageDefinition::m_HLSLDocumentation(Identifiers& idents)
+{
+	std::function<Identifier(const std::string&)> desc = [](const std::string & str) {
+		Identifier id;
+		id.mDeclaration = str;
+		return id;
+	};
 
-const TextEditor::LanguageDefinition &TextEditor::LanguageDefinition::GLSL()
+	/* SOURCE: https://docs.microsoft.com/en-us/windows/desktop/direct3dhlsl/dx-graphics-hlsl-intrinsic-functions */
+
+	idents.insert(std::make_pair("abort", desc("Terminates the current draw or dispatch call being executed.")));
+	idents.insert(std::make_pair("abs", desc("Absolute value (per component).")));
+	idents.insert(std::make_pair("acos", desc("Returns the arccosine of each component of x.")));
+	idents.insert(std::make_pair("all", desc("Test if all components of x are nonzero.")));
+	idents.insert(std::make_pair("AllMemoryBarrier", desc("Blocks execution of all threads in a group until all memory accesses have been completed.")));
+	idents.insert(std::make_pair("AllMemoryBarrierWithGroupSync", desc("Blocks execution of all threads in a group until all memory accesses have been completed and all threads in the group have reached this call.")));
+	idents.insert(std::make_pair("any", desc("Test if any component of x is nonzero.")));
+	idents.insert(std::make_pair("asdouble", desc("Reinterprets a cast value into a double.")));
+	idents.insert(std::make_pair("asfloat", desc("Convert the input type to a float.")));
+	idents.insert(std::make_pair("asin", desc("Returns the arcsine of each component of x.")));
+	idents.insert(std::make_pair("asint", desc("Convert the input type to an integer.")));
+	idents.insert(std::make_pair("asuint", desc("Convert the input type to an unsigned integer.")));
+	idents.insert(std::make_pair("atan", desc("Returns the arctangent of x.")));
+	idents.insert(std::make_pair("atan2", desc("Returns the arctangent of of two values (x,y).")));
+	idents.insert(std::make_pair("ceil", desc("Returns the smallest integer which is greater than or equal to x.")));
+	idents.insert(std::make_pair("CheckAccessFullyMapped", desc("Determines whether all values from a Sample or Load operation accessed mapped tiles in a tiled resource.")));
+	idents.insert(std::make_pair("clamp", desc("Clamps x to the range [min, max].")));
+	idents.insert(std::make_pair("clip", desc("Discards the current pixel, if any component of x is less than zero.")));
+	idents.insert(std::make_pair("cos", desc("Returns the cosine of x.")));
+	idents.insert(std::make_pair("cosh", desc("Returns the hyperbolic cosine of x.")));
+	idents.insert(std::make_pair("countbits", desc("Counts the number of bits (per component) in the input integer.")));
+	idents.insert(std::make_pair("cross", desc("Returns the cross product of two 3D vectors.")));
+	idents.insert(std::make_pair("D3DCOLORtoUBYTE4", desc("Swizzles and scales components of the 4D vector x to compensate for the lack of UBYTE4 support in some hardware.")));
+	idents.insert(std::make_pair("ddx", desc("Returns the partial derivative of x with respect to the screen-space x-coordinate.")));
+	idents.insert(std::make_pair("ddx_coarse", desc("Computes a low precision partial derivative with respect to the screen-space x-coordinate.")));
+	idents.insert(std::make_pair("ddx_fine", desc("Computes a high precision partial derivative with respect to the screen-space x-coordinate.")));
+	idents.insert(std::make_pair("ddy", desc("Returns the partial derivative of x with respect to the screen-space y-coordinate.")));
+	idents.insert(std::make_pair("ddy_coarse", desc("Returns the partial derivative of x with respect to the screen-space y-coordinate.")));
+	idents.insert(std::make_pair("ddy_fine", desc("Computes a high precision partial derivative with respect to the screen-space y-coordinate.")));
+	idents.insert(std::make_pair("degrees", desc("Converts x from radians to degrees.")));
+	idents.insert(std::make_pair("determinant", desc("Returns the determinant of the square matrix m.")));
+	idents.insert(std::make_pair("DeviceMemoryBarrier", desc("Blocks execution of all threads in a group until all device memory accesses have been completed.")));
+	idents.insert(std::make_pair("DeviceMemoryBarrierWithGroupSync", desc("Blocks execution of all threads in a group until all device memory accesses have been completed and all threads in the group have reached this call.")));
+	idents.insert(std::make_pair("distance", desc("Returns the distance between two points.")));
+	idents.insert(std::make_pair("dot", desc("Returns the dot product of two vectors.")));
+	idents.insert(std::make_pair("dst", desc("Calculates a distance vector.")));
+	idents.insert(std::make_pair("errorf", desc("Submits an error message to the information queue.")));
+	idents.insert(std::make_pair("EvaluateAttributeAtCentroid", desc("Evaluates at the pixel centroid.")));
+	idents.insert(std::make_pair("EvaluateAttributeAtSample", desc("Evaluates at the indexed sample location.")));
+	idents.insert(std::make_pair("EvaluateAttributeSnapped", desc("Evaluates at the pixel centroid with an offset.")));
+	idents.insert(std::make_pair("exp", desc("Returns the base-e exponent.")));
+	idents.insert(std::make_pair("exp2", desc("Base 2 exponent(per component).")));
+	idents.insert(std::make_pair("f16tof32", desc("Converts the float16 stored in the low-half of the uint to a float.")));
+	idents.insert(std::make_pair("f32tof16", desc("Converts an input into a float16 type.")));
+	idents.insert(std::make_pair("faceforward", desc("Returns -n * sign(dot(i, ng)).")));
+	idents.insert(std::make_pair("firstbithigh", desc("Gets the location of the first set bit starting from the highest order bit and working downward, per component.")));
+	idents.insert(std::make_pair("firstbitlow", desc("Returns the location of the first set bit starting from the lowest order bit and working upward, per component.")));
+	idents.insert(std::make_pair("floor", desc("Returns the greatest integer which is less than or equal to x.")));
+	idents.insert(std::make_pair("fma", desc("Returns the double-precision fused multiply-addition of a * b + c.")));
+	idents.insert(std::make_pair("fmod", desc("Returns the floating point remainder of x/y.")));
+	idents.insert(std::make_pair("frac", desc("Returns the fractional part of x.")));
+	idents.insert(std::make_pair("frexp", desc("Returns the mantissa and exponent of x.")));
+	idents.insert(std::make_pair("fwidth", desc("Returns abs(ddx(x)) + abs(ddy(x))")));
+	idents.insert(std::make_pair("GetRenderTargetSampleCount", desc("Returns the number of render-target samples.")));
+	idents.insert(std::make_pair("GetRenderTargetSamplePosition", desc("Returns a sample position (x,y) for a given sample index.")));
+	idents.insert(std::make_pair("GroupMemoryBarrier", desc("Blocks execution of all threads in a group until all group shared accesses have been completed.")));
+	idents.insert(std::make_pair("GroupMemoryBarrierWithGroupSync", desc("Blocks execution of all threads in a group until all group shared accesses have been completed and all threads in the group have reached this call.")));
+	idents.insert(std::make_pair("InterlockedAdd", desc("Performs a guaranteed atomic add of value to the dest resource variable.")));
+	idents.insert(std::make_pair("InterlockedAnd", desc("Performs a guaranteed atomic and.")));
+	idents.insert(std::make_pair("InterlockedCompareExchange", desc("Atomically compares the input to the comparison value and exchanges the result.")));
+	idents.insert(std::make_pair("InterlockedCompareStore", desc("Atomically compares the input to the comparison value.")));
+	idents.insert(std::make_pair("InterlockedExchange", desc("Assigns value to dest and returns the original value.")));
+	idents.insert(std::make_pair("InterlockedMax", desc("Performs a guaranteed atomic max.")));
+	idents.insert(std::make_pair("InterlockedMin", desc("Performs a guaranteed atomic min.")));
+	idents.insert(std::make_pair("InterlockedOr", desc("Performs a guaranteed atomic or.")));
+	idents.insert(std::make_pair("InterlockedXor", desc("Performs a guaranteed atomic xor.")));
+	idents.insert(std::make_pair("isfinite", desc("Returns true if x is finite, false otherwise.")));
+	idents.insert(std::make_pair("isinf", desc("Returns true if x is +INF or -INF, false otherwise.")));
+	idents.insert(std::make_pair("isnan", desc("Returns true if x is NAN or QNAN, false otherwise.")));
+	idents.insert(std::make_pair("ldexp", desc("Returns x * 2exp")));
+	idents.insert(std::make_pair("length", desc("Returns the length of the vector v.")));
+	idents.insert(std::make_pair("lerp", desc("Returns x + s(y - x).")));
+	idents.insert(std::make_pair("lit", desc("Returns a lighting vector (ambient, diffuse, specular, 1)")));
+	idents.insert(std::make_pair("log", desc("Returns the base-e logarithm of x.")));
+	idents.insert(std::make_pair("log10", desc("Returns the base-10 logarithm of x.")));
+	idents.insert(std::make_pair("log2", desc("Returns the base - 2 logarithm of x.")));
+	idents.insert(std::make_pair("mad", desc("Performs an arithmetic multiply/add operation on three values.")));
+	idents.insert(std::make_pair("max", desc("Selects the greater of x and y.")));
+	idents.insert(std::make_pair("min", desc("Selects the lesser of x and y.")));
+	idents.insert(std::make_pair("modf", desc("Splits the value x into fractional and integer parts.")));
+	idents.insert(std::make_pair("msad4", desc("Compares a 4-byte reference value and an 8-byte source value and accumulates a vector of 4 sums.")));
+	idents.insert(std::make_pair("mul", desc("Performs matrix multiplication using x and y.")));
+	idents.insert(std::make_pair("noise", desc("Generates a random value using the Perlin-noise algorithm.")));
+	idents.insert(std::make_pair("normalize", desc("Returns a normalized vector.")));
+	idents.insert(std::make_pair("pow", desc("Returns x^n.")));
+	idents.insert(std::make_pair("printf", desc("Submits a custom shader message to the information queue.")));
+	idents.insert(std::make_pair("Process2DQuadTessFactorsAvg", desc("Generates the corrected tessellation factors for a quad patch.")));
+	idents.insert(std::make_pair("Process2DQuadTessFactorsMax", desc("Generates the corrected tessellation factors for a quad patch.")));
+	idents.insert(std::make_pair("Process2DQuadTessFactorsMin", desc("Generates the corrected tessellation factors for a quad patch.")));
+	idents.insert(std::make_pair("ProcessIsolineTessFactors", desc("Generates the rounded tessellation factors for an isoline.")));
+	idents.insert(std::make_pair("ProcessQuadTessFactorsAvg", desc("Generates the corrected tessellation factors for a quad patch.")));
+	idents.insert(std::make_pair("ProcessQuadTessFactorsMax", desc("Generates the corrected tessellation factors for a quad patch.")));
+	idents.insert(std::make_pair("ProcessQuadTessFactorsMin", desc("Generates the corrected tessellation factors for a quad patch.")));
+	idents.insert(std::make_pair("ProcessTriTessFactorsAvg", desc("Generates the corrected tessellation factors for a tri patch.")));
+	idents.insert(std::make_pair("ProcessTriTessFactorsMax", desc("Generates the corrected tessellation factors for a tri patch.")));
+	idents.insert(std::make_pair("ProcessTriTessFactorsMin", desc("Generates the corrected tessellation factors for a tri patch.")));
+	idents.insert(std::make_pair("radians", desc("Converts x from degrees to radians.")));
+	idents.insert(std::make_pair("rcp", desc("Calculates a fast, approximate, per-component reciprocal.")));
+	idents.insert(std::make_pair("reflect", desc("Returns a reflection vector.")));
+	idents.insert(std::make_pair("refract", desc("Returns the refraction vector.")));
+	idents.insert(std::make_pair("reversebits", desc("Reverses the order of the bits, per component.")));
+	idents.insert(std::make_pair("round", desc("Rounds x to the nearest integer")));
+	idents.insert(std::make_pair("rsqrt", desc("Returns 1 / sqrt(x)")));
+	idents.insert(std::make_pair("saturate", desc("Clamps x to the range [0, 1]")));
+	idents.insert(std::make_pair("sign", desc("Computes the sign of x.")));
+	idents.insert(std::make_pair("sin", desc("Returns the sine of x")));
+	idents.insert(std::make_pair("sincos", desc("Returns the sineand cosine of x.")));
+	idents.insert(std::make_pair("sinh", desc("Returns the hyperbolic sine of x")));
+	idents.insert(std::make_pair("smoothstep", desc("Returns a smooth Hermite interpolation between 0 and 1.")));
+	idents.insert(std::make_pair("sqrt", desc("Square root (per component)")));
+	idents.insert(std::make_pair("step", desc("Returns (x >= a) ? 1 : 0")));
+	idents.insert(std::make_pair("tan", desc("Returns the tangent of x")));
+	idents.insert(std::make_pair("tanh", desc("Returns the hyperbolic tangent of x")));
+	idents.insert(std::make_pair("tex1D", desc("1D texture lookup.")));
+	idents.insert(std::make_pair("tex1Dbias", desc("1D texture lookup with bias.")));
+	idents.insert(std::make_pair("tex1Dgrad", desc("1D texture lookup with a gradient.")));
+	idents.insert(std::make_pair("tex1Dlod", desc("1D texture lookup with LOD.")));
+	idents.insert(std::make_pair("tex1Dproj", desc("1D texture lookup with projective divide.")));
+	idents.insert(std::make_pair("tex2D", desc("2D texture lookup.")));
+	idents.insert(std::make_pair("tex2Dbias", desc("2D texture lookup with bias.")));
+	idents.insert(std::make_pair("tex2Dgrad", desc("2D texture lookup with a gradient.")));
+	idents.insert(std::make_pair("tex2Dlod", desc("2D texture lookup with LOD.")));
+	idents.insert(std::make_pair("tex2Dproj", desc("2D texture lookup with projective divide.")));
+	idents.insert(std::make_pair("tex3D", desc("3D texture lookup.")));
+	idents.insert(std::make_pair("tex3Dbias", desc("3D texture lookup with bias.")));
+	idents.insert(std::make_pair("tex3Dgrad", desc("3D texture lookup with a gradient.")));
+	idents.insert(std::make_pair("tex3Dlod", desc("3D texture lookup with LOD.")));
+	idents.insert(std::make_pair("tex3Dproj", desc("3D texture lookup with projective divide.")));
+	idents.insert(std::make_pair("texCUBE", desc("Cube texture lookup.")));
+	idents.insert(std::make_pair("texCUBEbias", desc("Cube texture lookup with bias.")));
+	idents.insert(std::make_pair("texCUBEgrad", desc("Cube texture lookup with a gradient.")));
+	idents.insert(std::make_pair("texCUBElod", desc("Cube texture lookup with LOD.")));
+	idents.insert(std::make_pair("texCUBEproj", desc("Cube texture lookup with projective divide.")));
+	idents.insert(std::make_pair("transpose", desc("Returns the transpose of the matrix m.")));
+	idents.insert(std::make_pair("trunc", desc("Truncates floating-point value(s) to integer value(s)")));
+}
+
+const TextEditor::LanguageDefinition& TextEditor::LanguageDefinition::GLSL()
 {
 	static bool inited = false;
 	static LanguageDefinition langDef;
 	if (!inited)
 	{
-		static const char *const keywords[] = {
+		static const char* const keywords[] = {
 			"auto", "break", "case", "char", "const", "continue", "default", "do", "double", "else", "enum", "extern", "float", "for", "goto", "if", "inline", "int", "long", "register", "restrict", "return", "short",
 			"signed", "sizeof", "static", "struct", "switch", "typedef", "union", "unsigned", "void", "volatile", "while", "_Alignas", "_Alignof", "_Atomic", "_Bool", "_Complex", "_Generic", "_Imaginary",
-			"_Noreturn", "_Static_assert", "_Thread_local"};
-		for (auto &k : keywords)
+			"_Noreturn", "_Static_assert", "_Thread_local", "attribute", "uniform", "varying", "layout", "centroid", "flat", "smooth", "noperspective", "patch", "sample", "subroutine", "in", "out", "inout",
+			"bool", "true", "false", "invariant", "mat2", "mat3", "mat4", "dmat2", "dmat3", "dmat4", "mat2x2", "mat2x3", "mat2x4", "dmat2x2", "dmat2x3", "dmat2x4", "mat3x2", "mat3x3", "mat3x4", "dmat3x2", "dmat3x3", "dmat3x4",
+			"mat4x2", "mat4x3", "mat4x4", "dmat4x2", "dmat4x3", "dmat4x4", "vec2", "vec3", "vec4", "ivec2", "ivec3", "ivec4", "bvec2", "bvec3", "bvec4", "dvec2", "dvec3", "dvec4", "uint", "uvec2", "uvec3", "uvec4",
+			"lowp", "mediump", "highp", "precision", "sampler1D", "sampler2D", "sampler3D", "samplerCube", "sampler1DShadow", "sampler2DShadow", "samplerCubeShadow", "sampler1DArray", "sampler2DArray", "sampler1DArrayShadow",
+			"sampler2DArrayShadow", "isampler1D", "isampler2D", "isampler3D", "isamplerCube", "isampler1DArray", "isampler2DArray", "usampler1D", "usampler2D", "usampler3D", "usamplerCube", "usampler1DArray", "usampler2DArray",
+			"sampler2DRect", "sampler2DRectShadow", "isampler2DRect", "usampler2DRect", "samplerBuffer", "isamplerBuffer", "usamplerBuffer", "sampler2DMS", "isampler2DMS", "usampler2DMS", "sampler2DMSArray", "isampler2DMSArray",
+			"usampler2DMSArray", "samplerCubeArray", "samplerCubeArrayShadow", "isamplerCubeArray", "usamplerCubeArray"
+		};
+		for (auto& k : keywords)
 			langDef.mKeywords.insert(k);
 
-		static const char *const identifiers[] = {
-			"abort", "abs", "acos", "asin", "atan", "atexit", "atof", "atoi", "atol", "ceil", "clock", "cosh", "ctime", "div", "exit", "fabs", "floor", "fmod", "getchar", "getenv", "isalnum", "isalpha", "isdigit", "isgraph",
-			"ispunct", "isspace", "isupper", "kbhit", "log10", "log2", "log", "memcmp", "modf", "pow", "putchar", "putenv", "puts", "rand", "remove", "rename", "sinh", "sqrt", "srand", "strcat", "strcmp", "strerror", "time", "tolower", "toupper"};
-		for (auto &k : identifiers)
-		{
-			Identifier id;
-			id.mDeclaration = "Built-in function";
-			langDef.mIdentifiers.insert(std::make_pair(std::string(k), id));
-		}
+		m_GLSLDocumentation(langDef.mIdentifiers);
 
 		langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[ \\t]*#[ \\t]*[a-zA-Z_]+", PaletteIndex::Preprocessor));
 		langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("L?\\\"(\\\\.|[^\\\"])*\\\"", PaletteIndex::String));
@@ -3279,35 +2795,191 @@ const TextEditor::LanguageDefinition &TextEditor::LanguageDefinition::GLSL()
 	}
 	return langDef;
 }
+void TextEditor::LanguageDefinition::m_GLSLDocumentation(Identifiers& idents)
+{
+	std::function<Identifier(const std::string&)> desc = [](const std::string & str) {
+		Identifier id;
+		id.mDeclaration = str;
+		return id;
+	};
 
-const TextEditor::LanguageDefinition &TextEditor::LanguageDefinition::C()
+	/* SOURCE: https://docs.microsoft.com/en-us/windows/desktop/direct3dhlsl/dx-graphics-hlsl-intrinsic-functions */
+
+	idents.insert(std::make_pair("radians", desc("Converts x from degrees to radians.")));
+	idents.insert(std::make_pair("degrees", desc("Converts x from radians to degrees.")));
+	idents.insert(std::make_pair("sin", desc("Returns the sine of x")));
+	idents.insert(std::make_pair("cos", desc("Returns the cosine of x.")));
+	idents.insert(std::make_pair("tan", desc("Returns the tangent of x")));
+	idents.insert(std::make_pair("asin", desc("Returns the arcsine of each component of x.")));
+	idents.insert(std::make_pair("acos", desc("Returns the arccosine of each component of x.")));
+	idents.insert(std::make_pair("atan", desc("Returns the arctangent of x.")));
+	idents.insert(std::make_pair("sinh", desc("Returns the hyperbolic sine of x")));
+	idents.insert(std::make_pair("cosh", desc("Returns the hyperbolic cosine of x.")));
+	idents.insert(std::make_pair("tanh", desc("Returns the hyperbolic tangent of x")));
+	idents.insert(std::make_pair("asinh", desc("Returns the arc hyperbolic sine of x")));
+	idents.insert(std::make_pair("acosh", desc("Returns the arc hyperbolic cosine of x.")));
+	idents.insert(std::make_pair("atanh", desc("Returns the arc hyperbolic tangent of x")));
+	idents.insert(std::make_pair("pow", desc("Returns x^n.")));
+	idents.insert(std::make_pair("exp", desc("Returns the base-e exponent.")));
+	idents.insert(std::make_pair("exp2", desc("Base 2 exponent(per component).")));
+	idents.insert(std::make_pair("log", desc("Returns the base-e logarithm of x.")));
+	idents.insert(std::make_pair("log2", desc("Returns the base - 2 logarithm of x.")));
+	idents.insert(std::make_pair("sqrt", desc("Square root (per component).")));
+	idents.insert(std::make_pair("inversesqrt", desc("Returns rcp(sqrt(x)).")));
+	idents.insert(std::make_pair("abs", desc("Absolute value (per component).")));
+	idents.insert(std::make_pair("sign", desc("Computes the sign of x.")));
+	idents.insert(std::make_pair("floor", desc("Returns the greatest integer which is less than or equal to x.")));
+	idents.insert(std::make_pair("trunc", desc("Truncates floating-point value(s) to integer value(s)")));
+	idents.insert(std::make_pair("round", desc("Rounds x to the nearest integer")));
+	idents.insert(std::make_pair("roundEven", desc("Returns a value equal to the nearest integer to x. A fractional part of 0.5 will round toward the nearest even integer.")));
+	idents.insert(std::make_pair("ceil", desc("Returns the smallest integer which is greater than or equal to x.")));
+	idents.insert(std::make_pair("fract", desc("Returns the fractional part of x.")));
+	idents.insert(std::make_pair("mod", desc("Modulus. Returns x – y ∗ floor (x/y).")));
+	idents.insert(std::make_pair("modf", desc("Splits the value x into fractional and integer parts.")));
+	idents.insert(std::make_pair("max", desc("Selects the greater of x and y.")));
+	idents.insert(std::make_pair("min", desc("Selects the lesser of x and y.")));
+	idents.insert(std::make_pair("clamp", desc("Clamps x to the range [min, max].")));
+	idents.insert(std::make_pair("mix", desc("Returns x*(1-a)+y*a.")));
+	idents.insert(std::make_pair("isinf", desc("Returns true if x is +INF or -INF, false otherwise.")));
+	idents.insert(std::make_pair("isnan", desc("Returns true if x is NAN or QNAN, false otherwise.")));
+	idents.insert(std::make_pair("smoothstep", desc("Returns a smooth Hermite interpolation between 0 and 1.")));
+	idents.insert(std::make_pair("step", desc("Returns (x >= a) ? 1 : 0")));
+	idents.insert(std::make_pair("floatBitsToInt", desc("Returns a signed or unsigned integer value representing the encoding of a floating-point value. The floatingpoint value's bit-level representation is preserved.")));
+	idents.insert(std::make_pair("floatBitsToUint", desc("Returns a signed or unsigned integer value representing the encoding of a floating-point value. The floatingpoint value's bit-level representation is preserved.")));
+	idents.insert(std::make_pair("intBitsToFloat", desc("Returns a floating-point value corresponding to a signed or unsigned integer encoding of a floating-point value.")));
+	idents.insert(std::make_pair("uintBitsToFloat", desc("Returns a floating-point value corresponding to a signed or unsigned integer encoding of a floating-point value.")));
+	idents.insert(std::make_pair("fmod", desc("Returns the floating point remainder of x/y.")));
+	idents.insert(std::make_pair("fma", desc("Returns the double-precision fused multiply-addition of a * b + c.")));
+	idents.insert(std::make_pair("ldexp", desc("Returns x * 2exp")));
+	idents.insert(std::make_pair("packUnorm2x16", desc("First, converts each component of the normalized floating - point value v into 8 or 16bit integer values. Then, the results are packed into the returned 32bit unsigned integer.")));
+	idents.insert(std::make_pair("packUnorm4x8", desc("First, converts each component of the normalized floating - point value v into 8 or 16bit integer values. Then, the results are packed into the returned 32bit unsigned integer.")));
+	idents.insert(std::make_pair("packSnorm4x8", desc("First, converts each component of the normalized floating - point value v into 8 or 16bit integer values. Then, the results are packed into the returned 32bit unsigned integer.")));
+	idents.insert(std::make_pair("unpackUnorm2x16", desc("First, unpacks a single 32bit unsigned integer p into a pair of 16bit unsigned integers, four 8bit unsigned integers, or four 8bit signed integers.Then, each component is converted to a normalized floating point value to generate the returned two or four component vector.")));
+	idents.insert(std::make_pair("unpackUnorm4x8", desc("First, unpacks a single 32bit unsigned integer p into a pair of 16bit unsigned integers, four 8bit unsigned integers, or four 8bit signed integers.Then, each component is converted to a normalized floating point value to generate the returned two or four component vector.")));
+	idents.insert(std::make_pair("unpackSnorm4x8", desc("First, unpacks a single 32bit unsigned integer p into a pair of 16bit unsigned integers, four 8bit unsigned integers, or four 8bit signed integers.Then, each component is converted to a normalized floating point value to generate the returned two or four component vector.")));
+	idents.insert(std::make_pair("packDouble2x32", desc("Returns a double-precision value obtained by packing the components of v into a 64-bit value.")));
+	idents.insert(std::make_pair("unpackDouble2x32", desc("Returns a two-component unsigned integer vector representation of v.")));
+	idents.insert(std::make_pair("length", desc("Returns the length of the vector v.")));
+	idents.insert(std::make_pair("distance", desc("Returns the distance between two points.")));
+	idents.insert(std::make_pair("dot", desc("Returns the dot product of two vectors.")));
+	idents.insert(std::make_pair("cross", desc("Returns the cross product of two 3D vectors.")));
+	idents.insert(std::make_pair("normalize", desc("Returns a normalized vector.")));
+	idents.insert(std::make_pair("faceforward", desc("Returns -n * sign(dot(i, ng)).")));
+	idents.insert(std::make_pair("reflect", desc("Returns a reflection vector.")));
+	idents.insert(std::make_pair("refract", desc("Returns the refraction vector.")));
+	idents.insert(std::make_pair("matrixCompMult", desc("Multiply matrix x by matrix y component-wise.")));
+	idents.insert(std::make_pair("outerProduct", desc("Linear algebraic matrix multiply c * r.")));
+	idents.insert(std::make_pair("transpose", desc("Returns the transpose of the matrix m.")));
+	idents.insert(std::make_pair("determinant", desc("Returns the determinant of the square matrix m.")));
+	idents.insert(std::make_pair("inverse", desc("Returns a matrix that is the inverse of m.")));
+	idents.insert(std::make_pair("lessThan", desc("Returns the component-wise compare of x < y")));
+	idents.insert(std::make_pair("lessThanEqual", desc("Returns the component-wise compare of x <= y")));
+	idents.insert(std::make_pair("greaterThan", desc("Returns the component-wise compare of x > y")));
+	idents.insert(std::make_pair("greaterThanEqual", desc("Returns the component-wise compare of x >= y")));
+	idents.insert(std::make_pair("equal", desc("Returns the component-wise compare of x == y")));
+	idents.insert(std::make_pair("notEqual", desc("Returns the component-wise compare of x != y")));
+	idents.insert(std::make_pair("any", desc("Test if any component of x is nonzero.")));
+	idents.insert(std::make_pair("all", desc("Test if all components of x are nonzero.")));
+	idents.insert(std::make_pair("not", desc("Returns the component-wise logical complement of x.")));
+	idents.insert(std::make_pair("uaddCarry", desc("Adds 32bit unsigned integer x and y, returning the sum modulo 2^32.")));
+	idents.insert(std::make_pair("usubBorrow", desc("Subtracts the 32bit unsigned integer y from x, returning the difference if non-negatice, or 2^32 plus the difference otherwise.")));
+	idents.insert(std::make_pair("umulExtended", desc("Multiplies 32bit integers x and y, producing a 64bit result.")));
+	idents.insert(std::make_pair("imulExtended", desc("Multiplies 32bit integers x and y, producing a 64bit result.")));
+	idents.insert(std::make_pair("bitfieldExtract", desc("Extracts bits [offset, offset + bits - 1] from value, returning them in the least significant bits of the result.")));
+	idents.insert(std::make_pair("bitfieldInsert", desc("Returns the insertion the bits leas-significant bits of insert into base")));
+	idents.insert(std::make_pair("bitfieldReverse", desc("Returns the reversal of the bits of value.")));
+	idents.insert(std::make_pair("bitCount", desc("Returns the number of bits set to 1 in the binary representation of value.")));
+	idents.insert(std::make_pair("findLSB", desc("Returns the bit number of the least significant bit set to 1 in the binary representation of value.")));
+	idents.insert(std::make_pair("findMSB", desc("Returns the bit number of the most significant bit in the binary representation of value.")));
+	idents.insert(std::make_pair("textureSize", desc("Returns the dimensions of level lod  (if present) for the texture bound to sample.")));
+	idents.insert(std::make_pair("textureQueryLod", desc("Returns the mipmap array(s) that would be accessed in the x component of the return value.")));
+	idents.insert(std::make_pair("texture", desc("Use the texture coordinate P to do a texture lookup in the texture currently bound to sampler.")));
+	idents.insert(std::make_pair("textureProj", desc("Do a texture lookup with projection.")));
+	idents.insert(std::make_pair("textureLod", desc("Do a texture lookup as in texture but with explicit LOD.")));
+	idents.insert(std::make_pair("textureOffset", desc("Do a texture lookup as in texture but with offset added to the (u,v,w) texel coordinates before looking up each texel.")));
+	idents.insert(std::make_pair("texelFetch", desc("Use integer texture coordinate P to lookup a single texel from sampler.")));
+	idents.insert(std::make_pair("texelFetchOffset", desc("Fetch a single texel as in texelFetch offset by offset.")));
+	idents.insert(std::make_pair("texetureProjOffset", desc("Do a projective texture lookup as described in textureProj offset by offset as descrived in textureOffset.")));
+	idents.insert(std::make_pair("texetureLodOffset", desc("Do an offset texture lookup with explicit LOD.")));
+	idents.insert(std::make_pair("textureProjLod", desc("Do a projective texture lookup with explicit LOD.")));
+	idents.insert(std::make_pair("textureLodOffset", desc("Do an offset texture lookup with explicit LOD.")));
+	idents.insert(std::make_pair("textureProjLodOffset", desc("Do an offset projective texture lookup with explicit LOD.")));
+	idents.insert(std::make_pair("textureGrad", desc("Do a texture lookup as in texture but with explicit gradients.")));
+	idents.insert(std::make_pair("textureGradOffset", desc("Do a texture lookup with both explicit gradient and offset, as described in textureGrad and textureOffset.")));
+	idents.insert(std::make_pair("textureProjGrad", desc("Do a texture lookup both projectively and with explicit gradient.")));
+	idents.insert(std::make_pair("textureProjGradOffset", desc("Do a texture lookup both projectively and with explicit gradient as well as with offset.")));
+	idents.insert(std::make_pair("textureGather", desc("Built-in function.")));
+	idents.insert(std::make_pair("textureGatherOffset", desc("Built-in function.")));
+	idents.insert(std::make_pair("textureGatherOffsets", desc("Built-in function.")));
+	idents.insert(std::make_pair("texture1D", desc("1D texture lookup.")));
+	idents.insert(std::make_pair("texture1DLod", desc("1D texture lookup with LOD.")));
+	idents.insert(std::make_pair("texture1DProj", desc("1D texture lookup with projective divide.")));
+	idents.insert(std::make_pair("texture1DProjLod", desc("1D texture lookup with projective divide and with LOD.")));
+	idents.insert(std::make_pair("texture2D", desc("2D texture lookup.")));
+	idents.insert(std::make_pair("texture2DLod", desc("2D texture lookup with LOD.")));
+	idents.insert(std::make_pair("texture2DProj", desc("2D texture lookup with projective divide.")));
+	idents.insert(std::make_pair("texture2DProjLod", desc("2D texture lookup with projective divide and with LOD.")));
+	idents.insert(std::make_pair("texture3D", desc("3D texture lookup.")));
+	idents.insert(std::make_pair("texture3DLod", desc("3D texture lookup with LOD.")));
+	idents.insert(std::make_pair("texture3DProj", desc("3D texture lookup with projective divide.")));
+	idents.insert(std::make_pair("texture3DProjLod", desc("3D texture lookup with projective divide and with LOD.")));
+	idents.insert(std::make_pair("textureCube", desc("Cube texture lookup.")));
+	idents.insert(std::make_pair("textureCubeLod", desc("Cube texture lookup with LOD.")));
+	idents.insert(std::make_pair("shadow1D", desc("1D texture lookup.")));
+	idents.insert(std::make_pair("shadow1DLod", desc("1D texture lookup with LOD.")));
+	idents.insert(std::make_pair("shadow1DProj", desc("1D texture lookup with projective divide.")));
+	idents.insert(std::make_pair("shadow1DProjLod", desc("1D texture lookup with projective divide and with LOD.")));
+	idents.insert(std::make_pair("shadow2D", desc("2D texture lookup.")));
+	idents.insert(std::make_pair("shadow2DLod", desc("2D texture lookup with LOD.")));
+	idents.insert(std::make_pair("shadow2DProj", desc("2D texture lookup with projective divide.")));
+	idents.insert(std::make_pair("shadow2DProjLod", desc("2D texture lookup with projective divide and with LOD.")));
+	idents.insert(std::make_pair("dFdx", desc("Returns the partial derivative of x with respect to the screen-space x-coordinate.")));
+	idents.insert(std::make_pair("dFdy", desc("Returns the partial derivative of x with respect to the screen-space y-coordinate.")));
+	idents.insert(std::make_pair("fwidth", desc("Returns abs(ddx(x)) + abs(ddy(x))")));
+	idents.insert(std::make_pair("interpolateAtCentroid", desc("Return the value of the input varying interpolant sampled at a location inside the both the pixel and the primitive being processed.")));
+	idents.insert(std::make_pair("interpolateAtSample", desc("Return the value of the input varying interpolant at the location of sample number sample.")));
+	idents.insert(std::make_pair("interpolateAtOffset", desc("Return the value of the input varying interpolant sampled at an offset from the center of the pixel specified by offset.")));
+	idents.insert(std::make_pair("noise1", desc("Generates a random value")));
+	idents.insert(std::make_pair("noise2", desc("Generates a random value")));
+	idents.insert(std::make_pair("noise3", desc("Generates a random value")));
+	idents.insert(std::make_pair("noise4", desc("Generates a random value")));
+	idents.insert(std::make_pair("EmitStreamVertex", desc("Emit the current values of output variables to the current output primitive on stream stream.")));
+	idents.insert(std::make_pair("EndStreamPrimitive", desc("Completes the current output primitive on stream stream and starts a new one.")));
+	idents.insert(std::make_pair("EmitVertex", desc("Emit the current values to the current output primitive.")));
+	idents.insert(std::make_pair("EndPrimitive", desc("Completes the current output primitive and starts a new one.")));
+	idents.insert(std::make_pair("barrier", desc("For any given static instance of barrier(), all tessellation control shader invocations for a single input patch must enter it before any will be allowed to continue beyond it.")));
+}
+
+const TextEditor::LanguageDefinition& TextEditor::LanguageDefinition::C()
 {
 	static bool inited = false;
 	static LanguageDefinition langDef;
 	if (!inited)
 	{
-		static const char *const keywords[] = {
+		static const char* const keywords[] = {
 			"auto", "break", "case", "char", "const", "continue", "default", "do", "double", "else", "enum", "extern", "float", "for", "goto", "if", "inline", "int", "long", "register", "restrict", "return", "short",
 			"signed", "sizeof", "static", "struct", "switch", "typedef", "union", "unsigned", "void", "volatile", "while", "_Alignas", "_Alignof", "_Atomic", "_Bool", "_Complex", "_Generic", "_Imaginary",
-			"_Noreturn", "_Static_assert", "_Thread_local"};
-		for (auto &k : keywords)
+			"_Noreturn", "_Static_assert", "_Thread_local"
+		};
+		for (auto& k : keywords)
 			langDef.mKeywords.insert(k);
 
-		static const char *const identifiers[] = {
+		static const char* const identifiers[] = {
 			"abort", "abs", "acos", "asin", "atan", "atexit", "atof", "atoi", "atol", "ceil", "clock", "cosh", "ctime", "div", "exit", "fabs", "floor", "fmod", "getchar", "getenv", "isalnum", "isalpha", "isdigit", "isgraph",
-			"ispunct", "isspace", "isupper", "kbhit", "log10", "log2", "log", "memcmp", "modf", "pow", "putchar", "putenv", "puts", "rand", "remove", "rename", "sinh", "sqrt", "srand", "strcat", "strcmp", "strerror", "time", "tolower", "toupper"};
-		for (auto &k : identifiers)
+			"ispunct", "isspace", "isupper", "kbhit", "log10", "log2", "log", "memcmp", "modf", "pow", "putchar", "putenv", "puts", "rand", "remove", "rename", "sinh", "sqrt", "srand", "strcat", "strcmp", "strerror", "time", "tolower", "toupper"
+		};
+		for (auto& k : identifiers)
 		{
 			Identifier id;
 			id.mDeclaration = "Built-in function";
 			langDef.mIdentifiers.insert(std::make_pair(std::string(k), id));
 		}
 
-		langDef.mTokenize = [](const char *in_begin, const char *in_end, const char *&out_begin, const char *&out_end, PaletteIndex &paletteIndex) -> bool
+		langDef.mTokenize = [](const char* in_begin, const char* in_end, const char*& out_begin, const char*& out_end, PaletteIndex & paletteIndex) -> bool
 		{
 			paletteIndex = PaletteIndex::Max;
 
-			while (in_begin < in_end && isascii(*in_begin) && isblank(*in_begin))
+			while (in_begin < in_end && isblank(*in_begin))
 				in_begin++;
 
 			if (in_begin == in_end)
@@ -3344,13 +3016,13 @@ const TextEditor::LanguageDefinition &TextEditor::LanguageDefinition::C()
 	return langDef;
 }
 
-const TextEditor::LanguageDefinition &TextEditor::LanguageDefinition::SQL()
+const TextEditor::LanguageDefinition& TextEditor::LanguageDefinition::SQL()
 {
 	static bool inited = false;
 	static LanguageDefinition langDef;
 	if (!inited)
 	{
-		static const char *const keywords[] = {
+		static const char* const keywords[] = {
 			"ADD", "EXCEPT", "PERCENT", "ALL", "EXEC", "PLAN", "ALTER", "EXECUTE", "PRECISION", "AND", "EXISTS", "PRIMARY", "ANY", "EXIT", "PRINT", "AS", "FETCH", "PROC", "ASC", "FILE", "PROCEDURE",
 			"AUTHORIZATION", "FILLFACTOR", "PUBLIC", "BACKUP", "FOR", "RAISERROR", "BEGIN", "FOREIGN", "READ", "BETWEEN", "FREETEXT", "READTEXT", "BREAK", "FREETEXTTABLE", "RECONFIGURE",
 			"BROWSE", "FROM", "REFERENCES", "BULK", "FULL", "REPLICATION", "BY", "FUNCTION", "RESTORE", "CASCADE", "GOTO", "RESTRICT", "CASE", "GRANT", "RETURN", "CHECK", "GROUP", "REVOKE",
@@ -3359,24 +3031,26 @@ const TextEditor::LanguageDefinition &TextEditor::LanguageDefinition::SQL()
 			"CONTINUE", "INTO", "SHUTDOWN", "CONVERT", "IS", "SOME", "CREATE", "JOIN", "STATISTICS", "CROSS", "KEY", "SYSTEM_USER", "CURRENT", "KILL", "TABLE", "CURRENT_DATE", "LEFT", "TEXTSIZE",
 			"CURRENT_TIME", "LIKE", "THEN", "CURRENT_TIMESTAMP", "LINENO", "TO", "CURRENT_USER", "LOAD", "TOP", "CURSOR", "NATIONAL", "TRAN", "DATABASE", "NOCHECK", "TRANSACTION",
 			"DBCC", "NONCLUSTERED", "TRIGGER", "DEALLOCATE", "NOT", "TRUNCATE", "DECLARE", "NULL", "TSEQUAL", "DEFAULT", "NULLIF", "UNION", "DELETE", "OF", "UNIQUE", "DENY", "OFF", "UPDATE",
-			"DESC", "OFFSETS", "UPDATETEXT", "DISK", "ON", "USE", "DISTINCT", "OPEN", "USER", "DISTRIBUTED", "OPENDATASOURCE", "VALUES", "DOUBLE", "OPENQUERY", "VARYING", "DROP", "OPENROWSET", "VIEW",
-			"DUMMY", "OPENXML", "WAITFOR", "DUMP", "OPTION", "WHEN", "ELSE", "OR", "WHERE", "END", "ORDER", "WHILE", "ERRLVL", "OUTER", "WITH", "ESCAPE", "OVER", "WRITETEXT"};
+			"DESC", "OFFSETS", "UPDATETEXT", "DISK", "ON", "USE", "DISTINCT", "OPEN", "USER", "DISTRIBUTED", "OPENDATASOURCE", "VALUES", "DOUBLE", "OPENQUERY", "VARYING","DROP", "OPENROWSET", "VIEW",
+			"DUMMY", "OPENXML", "WAITFOR", "DUMP", "OPTION", "WHEN", "ELSE", "OR", "WHERE", "END", "ORDER", "WHILE", "ERRLVL", "OUTER", "WITH", "ESCAPE", "OVER", "WRITETEXT"
+		};
 
-		for (auto &k : keywords)
+		for (auto& k : keywords)
 			langDef.mKeywords.insert(k);
 
-		static const char *const identifiers[] = {
-			"ABS", "ACOS", "ADD_MONTHS", "ASCII", "ASCIISTR", "ASIN", "ATAN", "ATAN2", "AVG", "BFILENAME", "BIN_TO_NUM", "BITAND", "CARDINALITY", "CASE", "CAST", "CEIL",
-			"CHARTOROWID", "CHR", "COALESCE", "COMPOSE", "CONCAT", "CONVERT", "CORR", "COS", "COSH", "COUNT", "COVAR_POP", "COVAR_SAMP", "CUME_DIST", "CURRENT_DATE",
-			"CURRENT_TIMESTAMP", "DBTIMEZONE", "DECODE", "DECOMPOSE", "DENSE_RANK", "DUMP", "EMPTY_BLOB", "EMPTY_CLOB", "EXP", "EXTRACT", "FIRST_VALUE", "FLOOR", "FROM_TZ", "GREATEST",
-			"GROUP_ID", "HEXTORAW", "INITCAP", "INSTR", "INSTR2", "INSTR4", "INSTRB", "INSTRC", "LAG", "LAST_DAY", "LAST_VALUE", "LEAD", "LEAST", "LENGTH", "LENGTH2", "LENGTH4",
-			"LENGTHB", "LENGTHC", "LISTAGG", "LN", "LNNVL", "LOCALTIMESTAMP", "LOG", "LOWER", "LPAD", "LTRIM", "MAX", "MEDIAN", "MIN", "MOD", "MONTHS_BETWEEN", "NANVL", "NCHR",
-			"NEW_TIME", "NEXT_DAY", "NTH_VALUE", "NULLIF", "NUMTODSINTERVAL", "NUMTOYMINTERVAL", "NVL", "NVL2", "POWER", "RANK", "RAWTOHEX", "REGEXP_COUNT", "REGEXP_INSTR",
-			"REGEXP_REPLACE", "REGEXP_SUBSTR", "REMAINDER", "REPLACE", "ROUND", "ROWNUM", "RPAD", "RTRIM", "SESSIONTIMEZONE", "SIGN", "SIN", "SINH",
-			"SOUNDEX", "SQRT", "STDDEV", "SUBSTR", "SUM", "SYS_CONTEXT", "SYSDATE", "SYSTIMESTAMP", "TAN", "TANH", "TO_CHAR", "TO_CLOB", "TO_DATE", "TO_DSINTERVAL", "TO_LOB",
-			"TO_MULTI_BYTE", "TO_NCLOB", "TO_NUMBER", "TO_SINGLE_BYTE", "TO_TIMESTAMP", "TO_TIMESTAMP_TZ", "TO_YMINTERVAL", "TRANSLATE", "TRIM", "TRUNC", "TZ_OFFSET", "UID", "UPPER",
-			"USER", "USERENV", "VAR_POP", "VAR_SAMP", "VARIANCE", "VSIZE "};
-		for (auto &k : identifiers)
+		static const char* const identifiers[] = {
+			"ABS",  "ACOS",  "ADD_MONTHS",  "ASCII",  "ASCIISTR",  "ASIN",  "ATAN",  "ATAN2",  "AVG",  "BFILENAME",  "BIN_TO_NUM",  "BITAND",  "CARDINALITY",  "CASE",  "CAST",  "CEIL",
+			"CHARTOROWID",  "CHR",  "COALESCE",  "COMPOSE",  "CONCAT",  "CONVERT",  "CORR",  "COS",  "COSH",  "COUNT",  "COVAR_POP",  "COVAR_SAMP",  "CUME_DIST",  "CURRENT_DATE",
+			"CURRENT_TIMESTAMP",  "DBTIMEZONE",  "DECODE",  "DECOMPOSE",  "DENSE_RANK",  "DUMP",  "EMPTY_BLOB",  "EMPTY_CLOB",  "EXP",  "EXTRACT",  "FIRST_VALUE",  "FLOOR",  "FROM_TZ",  "GREATEST",
+			"GROUP_ID",  "HEXTORAW",  "INITCAP",  "INSTR",  "INSTR2",  "INSTR4",  "INSTRB",  "INSTRC",  "LAG",  "LAST_DAY",  "LAST_VALUE",  "LEAD",  "LEAST",  "LENGTH",  "LENGTH2",  "LENGTH4",
+			"LENGTHB",  "LENGTHC",  "LISTAGG",  "LN",  "LNNVL",  "LOCALTIMESTAMP",  "LOG",  "LOWER",  "LPAD",  "LTRIM",  "MAX",  "MEDIAN",  "MIN",  "MOD",  "MONTHS_BETWEEN",  "NANVL",  "NCHR",
+			"NEW_TIME",  "NEXT_DAY",  "NTH_VALUE",  "NULLIF",  "NUMTODSINTERVAL",  "NUMTOYMINTERVAL",  "NVL",  "NVL2",  "POWER",  "RANK",  "RAWTOHEX",  "REGEXP_COUNT",  "REGEXP_INSTR",
+			"REGEXP_REPLACE",  "REGEXP_SUBSTR",  "REMAINDER",  "REPLACE",  "ROUND",  "ROWNUM",  "RPAD",  "RTRIM",  "SESSIONTIMEZONE",  "SIGN",  "SIN",  "SINH",
+			"SOUNDEX",  "SQRT",  "STDDEV",  "SUBSTR",  "SUM",  "SYS_CONTEXT",  "SYSDATE",  "SYSTIMESTAMP",  "TAN",  "TANH",  "TO_CHAR",  "TO_CLOB",  "TO_DATE",  "TO_DSINTERVAL",  "TO_LOB",
+			"TO_MULTI_BYTE",  "TO_NCLOB",  "TO_NUMBER",  "TO_SINGLE_BYTE",  "TO_TIMESTAMP",  "TO_TIMESTAMP_TZ",  "TO_YMINTERVAL",  "TRANSLATE",  "TRIM",  "TRUNC", "TZ_OFFSET",  "UID",  "UPPER",
+			"USER",  "USERENV",  "VAR_POP",  "VAR_SAMP",  "VARIANCE",  "VSIZE "
+		};
+		for (auto& k : identifiers)
 		{
 			Identifier id;
 			id.mDeclaration = "Built-in function";
@@ -3406,25 +3080,27 @@ const TextEditor::LanguageDefinition &TextEditor::LanguageDefinition::SQL()
 	return langDef;
 }
 
-const TextEditor::LanguageDefinition &TextEditor::LanguageDefinition::AngelScript()
+const TextEditor::LanguageDefinition& TextEditor::LanguageDefinition::AngelScript()
 {
 	static bool inited = false;
 	static LanguageDefinition langDef;
 	if (!inited)
 	{
-		static const char *const keywords[] = {
+		static const char* const keywords[] = {
 			"and", "abstract", "auto", "bool", "break", "case", "cast", "class", "const", "continue", "default", "do", "double", "else", "enum", "false", "final", "float", "for",
 			"from", "funcdef", "function", "get", "if", "import", "in", "inout", "int", "interface", "int8", "int16", "int32", "int64", "is", "mixin", "namespace", "not",
 			"null", "or", "out", "override", "private", "protected", "return", "set", "shared", "super", "switch", "this ", "true", "typedef", "uint", "uint8", "uint16", "uint32",
-			"uint64", "void", "while", "xor"};
+			"uint64", "void", "while", "xor"
+		};
 
-		for (auto &k : keywords)
+		for (auto& k : keywords)
 			langDef.mKeywords.insert(k);
 
-		static const char *const identifiers[] = {
+		static const char* const identifiers[] = {
 			"cos", "sin", "tab", "acos", "asin", "atan", "atan2", "cosh", "sinh", "tanh", "log", "log10", "pow", "sqrt", "abs", "ceil", "floor", "fraction", "closeTo", "fpFromIEEE", "fpToIEEE",
-			"complex", "opEquals", "opAddAssign", "opSubAssign", "opMulAssign", "opDivAssign", "opAdd", "opSub", "opMul", "opDiv"};
-		for (auto &k : identifiers)
+			"complex", "opEquals", "opAddAssign", "opSubAssign", "opMulAssign", "opDivAssign", "opAdd", "opSub", "opMul", "opDiv"
+		};
+		for (auto& k : identifiers)
 		{
 			Identifier id;
 			id.mDeclaration = "Built-in function";
@@ -3454,60 +3130,45 @@ const TextEditor::LanguageDefinition &TextEditor::LanguageDefinition::AngelScrip
 	return langDef;
 }
 
-const TextEditor::LanguageDefinition &TextEditor::LanguageDefinition::Lua()
+const TextEditor::LanguageDefinition& TextEditor::LanguageDefinition::Lua()
 {
 	static bool inited = false;
 	static LanguageDefinition langDef;
 	if (!inited)
 	{
-		static const char *const keywords[] = {
-			"and", "break", "do", "else", "elseif", "end", "false", "for", "function", "goto", "if", "in", "local", "nil", "not", "or", "repeat", "return", "then", "true", "until", "while"};
+		static const char* const keywords[] = {
+			"and", "break", "do", "", "else", "elseif", "end", "false", "for", "function", "if", "in", "", "local", "nil", "not", "or", "repeat", "return", "then", "true", "until", "while"
+		};
 
-		for (auto &k : keywords)
+		for (auto& k : keywords)
 			langDef.mKeywords.insert(k);
 
-		static const char *const identifiers[] = {
-			"assert", "collectgarbage", "dofile", "error", "getmetatable", "ipairs", "loadfile", "load", "loadstring", "next", "pairs", "pcall", "print", "rawequal", "rawlen", "rawget", "rawset",
-			"select", "setmetatable", "tonumber", "tostring", "type", "xpcall", "_G", "_VERSION", "arshift", "band", "bnot", "bor", "bxor", "btest", "extract", "lrotate", "lshift", "replace",
-			"rrotate", "rshift", "create", "resume", "running", "status", "wrap", "yield", "isyieldable", "debug", "getuservalue", "gethook", "getinfo", "getlocal", "getregistry", "getmetatable",
+		static const char* const identifiers[] = {
+			"assert", "collectgarbage", "dofile", "error", "getmetatable", "ipairs", "loadfile", "load", "loadstring",  "next",  "pairs",  "pcall",  "print",  "rawequal",  "rawlen",  "rawget",  "rawset",
+			"select",  "setmetatable",  "tonumber",  "tostring",  "type",  "xpcall",  "_G",  "_VERSION","arshift", "band", "bnot", "bor", "bxor", "btest", "extract", "lrotate", "lshift", "replace",
+			"rrotate", "rshift", "create", "resume", "running", "status", "wrap", "yield", "isyieldable", "debug","getuservalue", "gethook", "getinfo", "getlocal", "getregistry", "getmetatable",
 			"getupvalue", "upvaluejoin", "upvalueid", "setuservalue", "sethook", "setlocal", "setmetatable", "setupvalue", "traceback", "close", "flush", "input", "lines", "open", "output", "popen",
 			"read", "tmpfile", "type", "write", "close", "flush", "lines", "read", "seek", "setvbuf", "write", "__gc", "__tostring", "abs", "acos", "asin", "atan", "ceil", "cos", "deg", "exp", "tointeger",
 			"floor", "fmod", "ult", "log", "max", "min", "modf", "rad", "random", "randomseed", "sin", "sqrt", "string", "tan", "type", "atan2", "cosh", "sinh", "tanh",
-			"pow", "frexp", "ldexp", "log10", "pi", "huge", "maxinteger", "mininteger", "loadlib", "searchpath", "seeall", "preload", "cpath", "path", "searchers", "loaded", "module", "require", "clock",
-			"date", "difftime", "execute", "exit", "getenv", "remove", "rename", "setlocale", "time", "tmpname", "byte", "char", "dump", "find", "format", "gmatch", "gsub", "len", "lower", "match", "rep",
-			"reverse", "sub", "upper", "pack", "packsize", "unpack", "concat", "maxn", "insert", "pack", "unpack", "remove", "move", "sort", "offset", "codepoint", "char", "len", "codes", "charpattern",
-			"coroutine", "table", "io", "os", "string", "utf8", "bit32", "math", "debug", "package"};
-		for (auto &k : identifiers)
+			 "pow", "frexp", "ldexp", "log10", "pi", "huge", "maxinteger", "mininteger", "loadlib", "searchpath", "seeall", "preload", "cpath", "path", "searchers", "loaded", "module", "require", "clock",
+			 "date", "difftime", "execute", "exit", "getenv", "remove", "rename", "setlocale", "time", "tmpname", "byte", "char", "dump", "find", "format", "gmatch", "gsub", "len", "lower", "match", "rep",
+			 "reverse", "sub", "upper", "pack", "packsize", "unpack", "concat", "maxn", "insert", "pack", "unpack", "remove", "move", "sort", "offset", "codepoint", "char", "len", "codes", "charpattern",
+			 "coroutine", "table", "io", "os", "string", "utf8", "bit32", "math", "debug", "package"
+		};
+		for (auto& k : identifiers)
 		{
 			Identifier id;
 			id.mDeclaration = "Built-in function";
 			langDef.mIdentifiers.insert(std::make_pair(std::string(k), id));
 		}
 
-		langDef.mTokenize = [](const char *in_begin, const char *in_end, const char *&out_begin, const char *&out_end, PaletteIndex &paletteIndex) -> bool
-		{
-			paletteIndex = PaletteIndex::Max;
-
-			while (in_begin < in_end && isascii(*in_begin) && isblank(*in_begin))
-				in_begin++;
-
-			if (in_begin == in_end)
-			{
-				out_begin = in_end;
-				out_end = in_end;
-				paletteIndex = PaletteIndex::Default;
-			}
-			else if (TokenizeLuaStyleString(in_begin, in_end, out_begin, out_end))
-				paletteIndex = PaletteIndex::String;
-			else if (TokenizeLuaStyleIdentifier(in_begin, in_end, out_begin, out_end))
-				paletteIndex = PaletteIndex::Identifier;
-			else if (TokenizeLuaStyleNumber(in_begin, in_end, out_begin, out_end))
-				paletteIndex = PaletteIndex::Number;
-			else if (TokenizeLuaStylePunctuation(in_begin, in_end, out_begin, out_end))
-				paletteIndex = PaletteIndex::Punctuation;
-
-			return paletteIndex != PaletteIndex::Max;
-		};
+		langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("L?\\\"(\\\\.|[^\\\"])*\\\"", PaletteIndex::String));
+		langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("\\\'[^\\\']*\\\'", PaletteIndex::String));
+		langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("0[xX][0-9a-fA-F]+[uU]?[lL]?[lL]?", PaletteIndex::Number));
+		langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+)([eE][+-]?[0-9]+)?[fF]?", PaletteIndex::Number));
+		langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[+-]?[0-9]+[Uu]?[lL]?[lL]?", PaletteIndex::Number));
+		langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[a-zA-Z_][a-zA-Z0-9_]*", PaletteIndex::Identifier));
+		langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[\\[\\]\\{\\}\\!\\%\\^\\&\\*\\(\\)\\-\\+\\=\\~\\|\\<\\>\\?\\/\\;\\,\\.]", PaletteIndex::Punctuation));
 
 		langDef.mCommentStart = "--[[";
 		langDef.mCommentEnd = "]]";
