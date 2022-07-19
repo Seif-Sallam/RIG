@@ -40,7 +40,7 @@ public:
 		Max
 	};
 
-	enum class ShortcutID
+	enum class ShortcutID : uint64_t
 	{
 		Undo,						// CTRL+Z
 		Redo,						// CTRL+Y
@@ -401,7 +401,7 @@ private:
 	bool mACSwitched; // if == true then allow selection with enter
 	Coordinates mACPosition;
 
-	std::vector<Shortcut> m_shortcuts;
+	std::vector<Shortcut> m_Shortcuts;
 	void CheckShortcuts();
 
 
