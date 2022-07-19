@@ -1,3 +1,4 @@
+// #include <Windows.h>
 #include <algorithm>
 #include <functional>
 #include <chrono>
@@ -7,10 +8,26 @@
 
 #include "TextEditor.h"
 
+// for windows because windows is shit
+// #ifdef max
+// 	#undef max
+// #endif
+// #ifdef min
+// 	#undef min
+// #endif
+
 // TODO
 // - multiline comments vs single-line: latter is blocking start of a ML
 // - handle unicode/utf
 // - testing
+
+// M for modifable (alt, ctrl, and shift)
+#define M_NOT_USED 0
+#define M_MUST_USE 1
+#define M_CAN_USE 2
+// K for key
+#define K_NOT_USED -1
+
 
 template<class InputIt1, class InputIt2, class BinaryPredicate>
 bool equals(InputIt1 first1, InputIt1 last1,
@@ -53,6 +70,34 @@ TextEditor::TextEditor()
 	SetPalette(GetDarkPalette());
 	SetLanguageDefinition(LanguageDefinition::HLSL());
 	mLines.push_back(Line());
+	m_shortcuts.resize((int)TextEditor::ShortcutID::Count);
+	//																							K1					K2			Alt			Ctrl		Shift
+	m_shortcuts[(int)TextEditor::ShortcutID::Undo] 						= TextEditor::Shortcut(ImGuiKey_Z, 			K_NOT_USED, M_NOT_USED, M_MUST_USE, M_NOT_USED); 	// CTRL+Z
+	m_shortcuts[(int)TextEditor::ShortcutID::Redo]						= TextEditor::Shortcut(ImGuiKey_Y,			K_NOT_USED, M_NOT_USED, M_MUST_USE, M_NOT_USED); 	// CTRL+Y
+	m_shortcuts[(int)TextEditor::ShortcutID::MoveUp]   					= TextEditor::Shortcut(ImGuiKey_UpArrow,	K_NOT_USED, M_NOT_USED, M_NOT_USED, M_CAN_USE);  	// UP ARROW (+ SHIFT)
+	m_shortcuts[(int)TextEditor::ShortcutID::MoveDown] 					= TextEditor::Shortcut(ImGuiKey_DownArrow, 	K_NOT_USED, M_NOT_USED, M_NOT_USED, M_CAN_USE); 	// DOWN ARROW (+ SHIFT)
+	m_shortcuts[(int)TextEditor::ShortcutID::MoveLeft] 					= TextEditor::Shortcut(ImGuiKey_LeftArrow, 	K_NOT_USED, M_NOT_USED, M_CAN_USE, M_CAN_USE);  	// LEFT ARROW (+ SHIFT/CTRL)
+	m_shortcuts[(int)TextEditor::ShortcutID::MoveRight] 				= TextEditor::Shortcut(ImGuiKey_RightArrow, K_NOT_USED, M_NOT_USED, M_CAN_USE, M_CAN_USE);  	// RIGHT ARROW (+ SHIFT/CTRL)
+	m_shortcuts[(int)TextEditor::ShortcutID::MoveUpBlock] 				= TextEditor::Shortcut(ImGuiKey_PageUp, 	K_NOT_USED, M_NOT_USED, M_NOT_USED, M_CAN_USE); 	// PAGE UP (+ SHIFT)
+	m_shortcuts[(int)TextEditor::ShortcutID::MoveDownBlock] 			= TextEditor::Shortcut(ImGuiKey_PageUp, 	K_NOT_USED, M_NOT_USED, M_NOT_USED, M_CAN_USE); 	// PAGE UP (+ SHIFT)
+	m_shortcuts[(int)TextEditor::ShortcutID::MoveTop] 					= TextEditor::Shortcut(ImGuiKey_Home, 		K_NOT_USED, M_MUST_USE, M_NOT_USED, M_CAN_USE); 	// CTRL + HOME (+ SHIFT)
+	m_shortcuts[(int)TextEditor::ShortcutID::MoveBottom] 				= TextEditor::Shortcut(ImGuiKey_End, 		K_NOT_USED, M_MUST_USE, M_NOT_USED, M_CAN_USE); 	// CTRL + END (+ SHIFT)
+	m_shortcuts[(int)TextEditor::ShortcutID::MoveStartLine] 			= TextEditor::Shortcut(ImGuiKey_Home, 		K_NOT_USED, M_NOT_USED, M_NOT_USED, M_CAN_USE); 	// HOME (+ SHIFT)
+	m_shortcuts[(int)TextEditor::ShortcutID::MoveEndLine] 				= TextEditor::Shortcut(ImGuiKey_End, 		K_NOT_USED, M_NOT_USED, M_NOT_USED, M_CAN_USE); 	// END (+ SHIFT)
+	m_shortcuts[(int)TextEditor::ShortcutID::ForwardDelete] 			= TextEditor::Shortcut(ImGuiKey_Delete, 	K_NOT_USED, M_NOT_USED, M_CAN_USE, M_NOT_USED); 	// CTRL + DELETE
+	m_shortcuts[(int)TextEditor::ShortcutID::BackwardDelete] 			= TextEditor::Shortcut(ImGuiKey_Backspace, 	K_NOT_USED, M_NOT_USED, M_CAN_USE, M_NOT_USED); 	// CTRL + BACKSPACE
+	m_shortcuts[(int)TextEditor::ShortcutID::OverwriteCursor] 			= TextEditor::Shortcut(ImGuiKey_Insert, 	K_NOT_USED, M_NOT_USED, M_NOT_USED, M_NOT_USED); 	// INSERT
+	m_shortcuts[(int)TextEditor::ShortcutID::Copy] 						= TextEditor::Shortcut (ImGuiKey_C, 		K_NOT_USED, M_NOT_USED, M_MUST_USE, M_NOT_USED); 	// CTRL+C
+	m_shortcuts[(int)TextEditor::ShortcutID::Paste] 					= TextEditor::Shortcut(ImGuiKey_V, 			K_NOT_USED, M_NOT_USED, M_MUST_USE, M_NOT_USED); 	// CTRL+V
+	m_shortcuts[(int)TextEditor::ShortcutID::Cut] 						= TextEditor::Shortcut  (ImGuiKey_X, 		K_NOT_USED, M_NOT_USED, M_MUST_USE, M_NOT_USED); 	// CTRL+X
+	m_shortcuts[(int)TextEditor::ShortcutID::SelectAll] 				= TextEditor::Shortcut(ImGuiKey_A, 			K_NOT_USED, M_NOT_USED, M_MUST_USE, M_NOT_USED); 	// CTRL+A
+	m_shortcuts[(int)TextEditor::ShortcutID::AutocompleteOpen] 			= TextEditor::Shortcut(ImGuiKey_Space, 		K_NOT_USED, M_NOT_USED, M_MUST_USE, M_NOT_USED); 	// CTRL+SPACE
+	m_shortcuts[(int)TextEditor::ShortcutID::AutocompleteSelect] 		= TextEditor::Shortcut(ImGuiKey_Tab, 		K_NOT_USED, M_NOT_USED, M_NOT_USED, M_NOT_USED); 	// TAB
+	m_shortcuts[(int)TextEditor::ShortcutID::AutocompleteSelectActive] 	= TextEditor::Shortcut(ImGuiKey_Enter, 		K_NOT_USED, M_NOT_USED, M_NOT_USED, M_NOT_USED); 	// RETURN
+	m_shortcuts[(int)TextEditor::ShortcutID::AutocompleteUp] 			= TextEditor::Shortcut(ImGuiKey_UpArrow, 	K_NOT_USED, M_NOT_USED, M_NOT_USED, M_NOT_USED); 	// UP ARROW
+	m_shortcuts[(int)TextEditor::ShortcutID::AutocompleteDown] 			= TextEditor::Shortcut(ImGuiKey_DownArrow, 	K_NOT_USED, M_NOT_USED, M_NOT_USED, M_CAN_USE); 	// DOWN ARROW
+	m_shortcuts[(int)TextEditor::ShortcutID::NewLine] 					= TextEditor::Shortcut(ImGuiKey_Enter, 		K_NOT_USED, M_NOT_USED, M_NOT_USED, M_NOT_USED);	// RETURN
+	m_shortcuts[(int)TextEditor::ShortcutID::IndentShift] 				= TextEditor::Shortcut(ImGuiKey_Tab, 		K_NOT_USED, M_NOT_USED, M_NOT_USED, M_CAN_USE); 	// TAB
 }
 
 TextEditor::~TextEditor()

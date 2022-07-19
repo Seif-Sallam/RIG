@@ -40,6 +40,52 @@ public:
 		Max
 	};
 
+	enum class ShortcutID
+	{
+		Undo,						// CTRL+Z
+		Redo,						// CTRL+Y
+		MoveUp,						// UP ARROW or SHIFT/CTRL + UP ARROW
+		MoveDown,					// DOWN ARROW or SHIFT/CTRL + DOWN ARROW
+		MoveLeft,					// LEFT ARROW or SHIFT/CTRL + LEFT ARROW
+		MoveRight,					// RIGHT ARROW or SHIFT/CTRL + RIGHT ARROW
+		MoveTop,					// CTRL+HOME
+		MoveBottom,					// CTRL+END
+		MoveUpBlock,				// PAGE UP (+ SHIFT)
+		MoveDownBlock,				// PAGE DOWN (+ SHIFT)
+		MoveEndLine,				// END
+		MoveStartLine,				// HOME
+		ForwardDelete,				// (CTRL+)DELETE
+		BackwardDelete,				// (CTRL+)BACKSPACE
+		OverwriteCursor,			// INSERT
+		Copy,						// CTRL+C
+		Paste,						// CTRL+V
+		Cut,						// CTRL+X
+		SelectAll,					// CTRL+A
+		AutocompleteOpen,			// CTRL+SPACE
+		AutocompleteSelect,			// TAB
+		AutocompleteSelectActive,	// ENTER
+		AutocompleteUp,				// UP ARROW
+		AutocompleteDown,			// DOWN ARROW
+		NewLine,					// ENTER
+		IndentShift,				// (SHIFT+)TAB
+		Count						// how many shortcuts are there?
+	};
+
+	struct Shortcut
+	{
+		// 0 - not used, 1 - must be used, 2 - can be used
+		int Alt;
+		int Ctrl;
+		int Shift;
+
+		// -1 - not used, everything else: Win32 VK_ code
+		int Key1;
+		int Key2;
+
+		Shortcut(int vk1 = -1, int vk2 = -2, int alt = 0, int ctrl = 0, int shift = 0) :
+			Key1(vk1), Key2(vk2), Alt(alt), Ctrl(ctrl), Shift(shift) { }
+	};
+
 	enum class SelectionMode
 	{
 		Normal,
@@ -254,6 +300,7 @@ public:
 	inline void SetCompleteBraces(bool s) { mCompleteBraces = s; }
 	inline void SetHorizontalScroll(bool s) { mHorizontalScroll = s; }
 	inline void SetSmartPredictions(bool s) { mAutocomplete = s; }
+	void SetShortcut(TextEditor::ShortcutID id, Shortcut s);
 
 	inline void SetShowLineNumbers(bool s) { mShowLineNumbers = s; mTextStart = s ? 20.0f : 6.0f; mLeftMargin = s ? 10.0f : -20.0f; }
 	inline int GetTextStart() const { return mShowLineNumbers ? 7 : 3; }
@@ -353,6 +400,10 @@ private:
 	bool mACOpened;
 	bool mACSwitched; // if == true then allow selection with enter
 	Coordinates mACPosition;
+
+	std::vector<Shortcut> m_shortcuts;
+	void CheckShortcuts();
+
 
 	bool mHorizontalScroll;
 	bool mCompleteBraces;
