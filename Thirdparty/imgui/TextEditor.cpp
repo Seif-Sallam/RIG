@@ -72,10 +72,12 @@ TextEditor::TextEditor()
 	, mIgnoreImGuiChild(false)
 	, mShowWhitespaces(false)
 	, mStartTime(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count())
+	, mFindOpened(false)
+	, mReplaceOpened(false)
+	, mFindJustOpened(false)
 {
 	memset(mFindWord, 0, 256 * sizeof(char));
-	mFindOpened = false;
-	mFindJustOpened = false;
+	memset(mReplaceWord, 0, 256 * sizeof(char));
 
 	SetPalette(GetDarkPalette());
 	SetLanguageDefinition(LanguageDefinition::HLSL());
@@ -110,6 +112,7 @@ TextEditor::TextEditor()
 	m_Shortcuts[(int)TextEditor::ShortcutID::NewLine] 					= TextEditor::Shortcut(ImGuiKey_Enter, 		K_NOT_USED, M_NOT_USED, M_NOT_USED, M_NOT_USED);	// RETURN
 	m_Shortcuts[(int)TextEditor::ShortcutID::IndentShift] 				= TextEditor::Shortcut(ImGuiKey_Tab, 		K_NOT_USED, M_NOT_USED, M_NOT_USED, M_CAN_USE); 	// TAB
 	m_Shortcuts[(int)TextEditor::ShortcutID::Find] 						= TextEditor::Shortcut(ImGuiKey_F, 			K_NOT_USED, M_NOT_USED, M_MUST_USE, M_CAN_USE); 	// TAB
+	m_Shortcuts[(int)TextEditor::ShortcutID::Replace] 					= TextEditor::Shortcut(ImGuiKey_H, 			K_NOT_USED, M_NOT_USED, M_MUST_USE, M_CAN_USE); 	// TAB
 }
 
 TextEditor::~TextEditor()
@@ -159,9 +162,9 @@ std::string TextEditor::GetText(const Coordinates & aStart, const Coordinates & 
 		else
 		{
 			istart = 0;
-			++lstart;
-			if (lstart < lend)
+			if (!(lstart == lend-1 && iend == -1))
 				result += '\n';
+			++lstart;
 		}
 	}
 
@@ -818,6 +821,7 @@ void TextEditor::HandleKeyboardInputs()
 							additionalChecks = !IsReadOnly() && !mACOpened;
 						break;
 						case ShortcutID::Find: mFindOpened = true; 	mFindJustOpened = true; break;
+						case ShortcutID::Replace: mFindOpened = true; mFindJustOpened = true; mReplaceOpened = true; break;
 						default: break;
 					}
 				}
@@ -1370,6 +1374,12 @@ void TextEditor::Render(const char* aTitle, const ImVec2& aSize, bool aBorder)
 	ColorizeInternal();
 	RenderInternal(aTitle);
 
+	if (ImGui::BeginPopupContextItem(("##edcontext" + std::string(aTitle)).c_str())) {
+		if (ImGui::Selectable("Cut")) { Cut(); }
+		if (ImGui::Selectable("Copy")) { Copy(); }
+		if (ImGui::Selectable("Paste")) { Paste(); }
+		ImGui::EndPopup();
+	}
 	/* FIND TEXT WINDOW */
 	if (mFindOpened)
 	{
@@ -1379,14 +1389,14 @@ void TextEditor::Render(const char* aTitle, const ImVec2& aSize, bool aBorder)
 		ImVec4 bgc = ImGui::GetStyle().Colors[ImGuiCol_WindowBg];
 
 		ImGui::SetNextWindowPos(ImVec2(findOrigin.x + windowWidth - 250, findOrigin.y), ImGuiCond_Always);
-		ImGui::BeginChild(("##ted_findwnd" + std::string(aTitle)).c_str(), ImVec2(200, 40), true);
+		ImGui::BeginChild(("##ted_findwnd" + std::string(aTitle)).c_str(), ImVec2(220.0f, mReplaceOpened ? 80.0f : 40.0f), true);
 
-		ImGui::PushItemWidth(-15);
+		ImGui::PushItemWidth(-45);
 		if (ImGui::InputText(("##ted_findtextbox" + std::string(aTitle)).c_str(), mFindWord, 256, ImGuiInputTextFlags_EnterReturnsTrue)) {
 			auto curPos = mState.mCursorPosition;
 			size_t cindex = 0;
 			for (size_t ln = 0; ln < curPos.mLine; ln++)
-				cindex += (int)GetLineCharacterCount(ln) + 1;
+				cindex += GetLineCharacterCount((int)ln) + 1;
 			cindex += curPos.mColumn;
 
 			std::string textSrc = GetText();
@@ -1424,8 +1434,116 @@ void TextEditor::Render(const char* aTitle, const ImVec2& aSize, bool aBorder)
 		}
 		ImGui::PopItemWidth();
 		ImGui::SameLine();
+		if (ImGui::ArrowButton(("##expandFind" + std::string(aTitle)).c_str(), mReplaceOpened ? ImGuiDir_Up : ImGuiDir_Down))
+			mReplaceOpened = !mReplaceOpened;
+
+		ImGui::SameLine();
 		if (ImGui::Button(("X##" + std::string(aTitle)).c_str()))
 			mFindOpened = false;
+
+		if (mReplaceOpened) {
+			ImGui::PushItemWidth(-45);
+			ImGui::NewLine();
+			bool shouldReplace = false;
+			if (ImGui::InputText(("##ted_replacetb" + std::string(aTitle)).c_str(), mReplaceWord, 256, ImGuiInputTextFlags_EnterReturnsTrue))
+				shouldReplace = true;
+			ImGui::PopItemWidth();
+
+			ImGui::SameLine();
+			if (ImGui::Button((">##replaceOne" + std::string(aTitle)).c_str()) || shouldReplace) {
+				if (strlen(mFindWord) > 0) {
+					auto curPos = mState.mCursorPosition;
+					size_t cindex = 0;
+					for (size_t ln = 0; ln < curPos.mLine; ln++)
+						cindex += GetLineCharacterCount((int)ln) + 1;
+					cindex += curPos.mColumn;
+
+					std::string textSrc = GetText();
+					size_t textLoc = textSrc.find(mFindWord, cindex);
+					if (textLoc == std::string::npos)
+						textLoc = textSrc.find(mFindWord, 0);
+
+
+					if (textLoc != std::string::npos) {
+						curPos.mLine = curPos.mColumn = 0;
+						cindex = 0;
+						for (size_t ln = 0; ln < mLines.size(); ln++) {
+							int charCount = GetLineCharacterCount((int)ln) + 1;
+							if (cindex + charCount > textLoc) {
+								curPos.mLine = (int)ln;
+								curPos.mColumn = (int)textLoc - cindex;
+								break;
+							}
+							else // just keep adding
+								cindex += charCount;
+						}
+
+
+						auto selStart = curPos, selEnd = curPos;
+						selEnd.mColumn += (int)strlen(mFindWord);
+						SetSelection(curPos, selEnd);
+						DeleteSelection(); // ik there are better and more optimized ways to do this, but im lazy rn
+						InsertText(mReplaceWord);
+						SetCursorPosition(selEnd);
+
+						ImGui::SetKeyboardFocusHere(0);
+					}
+				}
+			}
+
+			ImGui::SameLine();
+			if (ImGui::Button((">>##replaceAll" + std::string(aTitle)).c_str())) {
+				if (strlen(mFindWord) > 0) {
+					auto curPos = mState.mCursorPosition;
+					size_t cindex = 0;
+					for (size_t ln = 0; ln < curPos.mLine; ln++)
+						cindex += GetLineCharacterCount((int)ln) + 1;
+					cindex += curPos.mColumn;
+
+					std::string textSrc = GetText();
+					size_t textLoc = textSrc.find(mFindWord, cindex);
+
+					do {
+						if (textLoc != std::string::npos) {
+							curPos.mLine = curPos.mColumn = 0;
+							cindex = 0;
+							for (size_t ln = 0; ln < mLines.size(); ln++) {
+								int charCount = GetLineCharacterCount((int)ln) + 1;
+								if (cindex + charCount > textLoc) {
+									curPos.mLine = (int)ln;
+									curPos.mColumn = (int)textLoc - cindex;
+									break;
+								}
+								else // just keep adding
+									cindex += charCount;
+							}
+
+
+							auto selStart = curPos, selEnd = curPos;
+							selEnd.mColumn += (int)strlen(mFindWord);
+							SetSelection(curPos, selEnd);
+							DeleteSelection(); // ik there are better and more optimized ways to do this, but im lazy rn
+							InsertText(mReplaceWord);
+							SetCursorPosition(selEnd);
+
+							ImGui::SetKeyboardFocusHere(0);
+
+							// find next occurance
+							textSrc = GetText();
+							cindex = 0;
+							for (size_t ln = 0; ln < selEnd.mLine; ln++)
+								cindex += GetLineCharacterCount((int)ln) + 1;
+							cindex += selEnd.mColumn;
+
+							textLoc = textSrc.find(mFindWord, cindex);
+						}
+
+						if (textLoc == std::string::npos)
+							textLoc = textSrc.find(mFindWord, 0);
+					} while (textLoc != std::string::npos);
+				}
+			}
+		}
 
 		ImGui::EndChild();
 

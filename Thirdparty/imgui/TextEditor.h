@@ -70,6 +70,7 @@ public:
 		NewLine,					// ENTER
 		IndentShift,				// (SHIFT+)TAB
 		Find,						// CTRL+F
+		Replace,					// CTRL+H
 		Count						// how many shortcuts are there?
 	};
 
@@ -423,6 +424,8 @@ private:
 	char mFindWord[256];
 	bool mFindOpened;
 	bool mFindJustOpened;
+	bool mReplaceOpened;
+	char mReplaceWord[256];
 
 	bool mAutocomplete;
 	std::string mACWord;
