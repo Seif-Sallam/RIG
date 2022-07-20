@@ -26,11 +26,14 @@ namespace IDE
 	MainWindow::MainWindow(uint32_t argc, const char *argv[])
 		: m_TextEditorWindowName("Text Editors"), m_LogWindowName("Log"), m_RegisterFileWindowName("Register File")
 	{
-		InitilizeWindow();
-		auto lang = TextEditor::LanguageDefinition::HLSL();
 
+		InitilizeWindow();
+		m_TextEditor.SetFunctionTooltips(true);
+		// m_TextEditor.SetSidebarVisible(false);
+		auto lang = TextEditor::LanguageDefinition::RISCV();
+		m_TextEditor.SetColorizerEnable(true);
 		m_TextEditor.SetLanguageDefinition(lang);
-		std::string str = "TEXT\n";
+		std::string str = "ADD\n";
 		std::ifstream inputFile("/home/seif-sallam/Desktop/Assembler.txt");
 		if (inputFile.fail())
 		{
@@ -265,6 +268,100 @@ namespace IDE
 		ImGui::Begin(m_RegisterFileWindowName.c_str());
 		{
 			ImGui::TextUnformatted("Register File Window Text");
+
+		static TextEditor::Palette p= {
+			0xffff0000,	// "Default"
+			0xffd69c56,	// "Keyword"
+			0xff00ff00,	// "Number"
+			0xff7070e0,	// "String"
+			0xff70a0e0, // "Char literal"
+			0xffffffff, // "Punctuation"
+			0xff408080,	// "Preprocessor"
+			0xffaaaaaa, // "Identifier"
+			0xff9bc64d, // "Known identifier"
+			0xffc040a0, // "Preproc identifier"
+			0xff206020, // "Comment (single line)"
+			0xff406020, // "Comment (multi line)"
+			0xff101010, // "Background"
+			0xffe0e0e0, // "Cursor"
+			0x80a06020, // "Selection"
+			0x800020ff, // "ErrorMarker"
+			0xff0000ff, // "Breakpoint"
+			0xffffffff, // "Breakpoint outline"
+			0xFF1DD8FF, // "Current line indicator"
+			0xFF696969, // "Current line indicator outline"
+			0xff707000, // "Line number"
+			0x40000000, // "Current line fill"
+			0x40808080, // "Current line fill (inactive)"
+			0x40a0a0a0, // "Current line edge"
+			0xff33ffff, // "Error message"
+			0xffffffff, // "BreakpointDisabled"
+			0xffaaaaaa, // "UserFunction"
+			0xffb0c94e, // "UserType"
+			0xffaaaaaa, // "UniformType"
+			0xffaaaaaa, // "GlobalVariable"
+			0xffaaaaaa, // "LocalVariable"
+			0xff888888	// "FunctionArgument"
+		};
+		static float cols[32][3];
+		static bool init = false;
+		if(!init)
+		{
+			for(int i =0 ;i < 32; i++)
+			{
+				cols[i][2] = float(p[i] & 0xff) / 255.0;
+				cols[i][1] = float((p[i] >> 8) & 0xff) / 255.0;
+				cols[i][0] = float((p[i] >> 16) & 0xff) / 255.0;
+			}
+			init = true;
+		}
+		static std::vector<std::string> titles= {
+			 "Default"
+			,"Keyword"
+			,"Number"
+			,"String"
+			,"Char literal"
+			,"Punctuation"
+			,"Preprocessor"
+			,"Identifier"
+			,"Known identifier"
+			,"Preproc identifier"
+			,"Comment (single line)"
+			,"Comment (multi line)"
+			,"Background"
+			,"Cursor"
+			,"Selection"
+			,"ErrorMarker"
+			,"Breakpoint"
+			,"Breakpoint outline"
+			,"Current line indicator"
+			,"Current line indicator outline"
+			,"Line number"
+			,"Current line fill"
+			,"Current line fill (inactive)"
+			,"Current line edge"
+			,"Error message"
+			,"BreakpointDisabled"
+			,"UserFunction"
+			,"UserType"
+			,"UniformType"
+			,"GlobalVariable"
+			,"LocalVariable"
+			,"FunctionArgument"
+		};
+
+		for(int i = 0; i < (int)32; i++)
+		{
+			std::string title = titles[i] + "###" +  std::to_string(i);
+			ImGui::ColorEdit3(title.c_str(), cols[i]);
+
+			uint32_t color = p[i] & 0xff000000;
+			uint32_t r = std::floor(cols[i][0]* 255) , g = std::floor(cols[i][1] * 255), b = std::floor(cols[i][2]* 255);
+			color = color | b << 16 | g << 8 | r;
+			p[i] = color;
+		}
+		m_TextEditor.SetPalette(p);
+
 		}
 		ImGui::End();
 	}
@@ -307,8 +404,8 @@ namespace IDE
 	void KeyCallbackFunc(GLFWwindow *window, int key, int scancode, int action, int mods)
 	{
 		// close window when ESC has been pressed
-		if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
-			glfwSetWindowShouldClose(window, GL_TRUE);
+		// if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
+		// 	glfwSetWindowShouldClose(window, GL_TRUE);
 	}
 	void ErrorCallbackFunc(int error, const char *description)
 	{
