@@ -280,18 +280,8 @@ namespace IDE
 			}
 
 			static const LanguageDefinition &CPlusPlus();
-			static const LanguageDefinition &HLSL();
-			static const LanguageDefinition &GLSL();
-			static const LanguageDefinition &SPIRV();
 			static const LanguageDefinition &RISCV();
 			static const LanguageDefinition &C();
-			static const LanguageDefinition &SQL();
-			static const LanguageDefinition &AngelScript();
-			static const LanguageDefinition &Lua();
-
-		private:
-			static void m_HLSLDocumentation(Identifiers &idents);
-			static void m_GLSLDocumentation(Identifiers &idents);
 		};
 
 		TextEditor();
@@ -640,7 +630,7 @@ namespace IDE
 		bool mACSwitched; // if == true then allow selection with enter
 		Coordinates mACPosition;
 
-		std::vector<Shortcut> m_shortcuts;
+		std::vector<Shortcut> mShortcuts;
 
 		bool mScrollbarMarkers;
 		bool mHorizontalScroll;

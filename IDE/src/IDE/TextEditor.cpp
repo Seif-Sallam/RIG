@@ -29,97 +29,143 @@ namespace IDE
 	}
 
 	TextEditor::TextEditor()
-		: mLineSpacing(1.0f), mUndoIndex(0), mInsertSpaces(false), mTabSize(4), mAutocomplete(true), mACOpened(false), mHighlightLine(true), mHorizontalScroll(true), mCompleteBraces(true), mShowLineNumbers(true), mSmartIndent(true), mOverwrite(false), mReadOnly(false), mWithinRender(false), mScrollToCursor(false), mScrollToTop(false), mTextChanged(false), mColorizerEnabled(true), mTextStart(20.0f), mLeftMargin(DebugDataSpace + LineNumberSpace), mCursorPositionChanged(false), mColorRangeMin(0), mColorRangeMax(0), mSelectionMode(SelectionMode::Normal), mCheckComments(true), mLastClick(-1.0f), mHandleKeyboardInputs(true), mHandleMouseInputs(true), mIgnoreImGuiChild(false), mShowWhitespaces(false), mDebugCurrentLineUpdated(false), mDebugCurrentLine(-1), mPath(""), OnContentUpdate(nullptr), mFuncTooltips(true), mUIScale(1.0f), mUIFontSize(18.0f), mEditorFontSize(18.0f), mActiveAutocomplete(false), m_readyForAutocomplete(false), m_requestAutocomplete(false), mScrollbarMarkers(false), mAutoindentOnPaste(false), mIsSnippet(false), mSnippetTagSelected(0), mSidebar(true), mHasSearch(true), mReplaceIndex(0), mStartTime(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count())
+		: mLineSpacing(1.0f)
+		, mUndoIndex(0)
+		, mInsertSpaces(false)
+		, mTabSize(4)
+		, mAutocomplete(true)
+		, mACOpened(false)
+		, mHighlightLine(true)
+		, mHorizontalScroll(true)
+		, mCompleteBraces(true)
+		, mShowLineNumbers(true)
+		, mSmartIndent(true)
+		, mOverwrite(false)
+		, mReadOnly(false)
+		, mWithinRender(false)
+		, mScrollToCursor(false)
+		, mScrollToTop(false)
+		, mTextChanged(false)
+		, mColorizerEnabled(true)
+		, mTextStart(20.0f)
+		, mLeftMargin(DebugDataSpace + LineNumberSpace)
+		, mCursorPositionChanged(false)
+		, mColorRangeMin(0)
+		, mColorRangeMax(0)
+		, mSelectionMode(SelectionMode::Normal)
+		, mCheckComments(true)
+		, mLastClick(-1.0f)
+		, mHandleKeyboardInputs(true)
+		, mHandleMouseInputs(true)
+		, mIgnoreImGuiChild(false)
+		, mShowWhitespaces(false)
+		, mDebugCurrentLineUpdated(false)
+		, mDebugCurrentLine(-1)
+		, mPath("")
+		, OnContentUpdate(nullptr)
+		, mFuncTooltips(true)
+		, mUIScale(1.0f)
+		, mUIFontSize(18.0f)
+		, mEditorFontSize(18.0f)
+		, mActiveAutocomplete(false)
+		, m_readyForAutocomplete(false)
+		, m_requestAutocomplete(false)
+		, mScrollbarMarkers(false)
+		, mAutoindentOnPaste(false)
+		, mIsSnippet(false)
+		, mSnippetTagSelected(0)
+		, mSidebar(true)
+		, mHasSearch(true)
+		, mReplaceIndex(0)
+		, mFindOpened(false)
+		, mReplaceOpened(false)
+		, mFindJustOpened(false)
+		, mFindFocused(false)
+		, mReplaceFocused(false)
+		, OnDebuggerAction(nullptr)
+		, OnBreakpointRemove(nullptr)
+		, OnBreakpointUpdate(nullptr)
+		, OnIdentifierHover(nullptr)
+		, HasIdentifierHover(nullptr)
+		, OnExpressionHover(nullptr)
+		, HasExpressionHover(nullptr)
+		, mDebugBarWidth(0.0f)
+		, mDebugBarHeight(0.0f)
+		, mStartTime(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count())
 	{
-		memset(mFindWord, 0, 256 * sizeof(char));
-		memset(mReplaceWord, 0, 256 * sizeof(char));
-		mFindOpened = false;
-		mReplaceOpened = false;
-		mFindJustOpened = false;
-		mFindFocused = false;
-		mReplaceFocused = false;
-
-		OnDebuggerJump = nullptr;
-		OnDebuggerAction = nullptr;
-		OnBreakpointRemove = nullptr;
-		OnBreakpointUpdate = nullptr;
-		OnIdentifierHover = nullptr;
-		HasIdentifierHover = nullptr;
-		OnExpressionHover = nullptr;
-		HasExpressionHover = nullptr;
-
-		mDebugBarWidth = 0.0f;
-		mDebugBarHeight = 0.0f;
-
+		memset(mFindWord, 0, 256 * sizeof(*mFindWord));
+		memset(mReplaceWord, 0, 256 * sizeof(*mReplaceWord));
 		SetPalette(GetDarkPalette());
-		SetLanguageDefinition(LanguageDefinition::HLSL());
-		mLines.push_back(Line());
-
-		m_shortcuts = GetDefaultShortcuts();
+		SetLanguageDefinition(LanguageDefinition::RISCV());
+		mLines.emplace_back();
+		mShortcuts = GetDefaultShortcuts();
 	}
 
 	const std::vector<TextEditor::Shortcut> TextEditor::GetDefaultShortcuts()
 	{
-		std::vector<TextEditor::Shortcut> ret;
-		ret.resize((int)TextEditor::ShortcutID::Count);
-
-		ret[(int)TextEditor::ShortcutID::Undo] = TextEditor::Shortcut(ImGuiKey_Z, -1, 0, 1, 0);							// CTRL+Z
-		ret[(int)TextEditor::ShortcutID::Redo] = TextEditor::Shortcut(ImGuiKey_Y, -1, 0, 1, 0);							// CTRL+Y
-		ret[(int)TextEditor::ShortcutID::MoveUp] = TextEditor::Shortcut(ImGuiKey_UpArrow, -1, 0, 0, 0);					// UP ARROW
-		ret[(int)TextEditor::ShortcutID::SelectUp] = TextEditor::Shortcut(ImGuiKey_UpArrow, -1, 0, 0, 1);				// SHIFT + UP ARROW
-		ret[(int)TextEditor::ShortcutID::MoveDown] = TextEditor::Shortcut(ImGuiKey_DownArrow, -1, 0, 0, 0);				// DOWN ARROW
-		ret[(int)TextEditor::ShortcutID::SelectDown] = TextEditor::Shortcut(ImGuiKey_DownArrow, -1, 0, 0, 1);			// SHIFT + DOWN ARROW
-		ret[(int)TextEditor::ShortcutID::MoveLeft] = TextEditor::Shortcut(ImGuiKey_LeftArrow, -1, 0, 0, 0);				// LEFT ARROW (+ SHIFT/CTRL)
-		ret[(int)TextEditor::ShortcutID::SelectLeft] = TextEditor::Shortcut(ImGuiKey_LeftArrow, -1, 0, 0, 1);			// SHIFT + LEFT ARROW
-		ret[(int)TextEditor::ShortcutID::MoveWordLeft] = TextEditor::Shortcut(ImGuiKey_LeftArrow, -1, 0, 1, 0);			// CTRL + LEFT ARROW
-		ret[(int)TextEditor::ShortcutID::SelectWordLeft] = TextEditor::Shortcut(ImGuiKey_LeftArrow, -1, 0, 1, 1);		// CTRL + SHIFT + LEFT ARROW
-		ret[(int)TextEditor::ShortcutID::MoveRight] = TextEditor::Shortcut(ImGuiKey_RightArrow, -1, 0, 0, 0);			// RIGHT ARROW
-		ret[(int)TextEditor::ShortcutID::SelectRight] = TextEditor::Shortcut(ImGuiKey_RightArrow, -1, 0, 0, 1);			// SHIFT + RIGHT ARROW
-		ret[(int)TextEditor::ShortcutID::MoveWordRight] = TextEditor::Shortcut(ImGuiKey_RightArrow, -1, 0, 1, 0);		// CTRL + RIGHT ARROW
-		ret[(int)TextEditor::ShortcutID::SelectWordRight] = TextEditor::Shortcut(ImGuiKey_RightArrow, -1, 0, 1, 1);		// CTRL + SHIFT + RIGHT ARROW
-		ret[(int)TextEditor::ShortcutID::MoveUpBlock] = TextEditor::Shortcut(ImGuiKey_PageUp, -1, 0, 0, 0);				// PAGE UP
-		ret[(int)TextEditor::ShortcutID::SelectUpBlock] = TextEditor::Shortcut(ImGuiKey_PageUp, -1, 0, 0, 1);			// SHIFT + PAGE UP
-		ret[(int)TextEditor::ShortcutID::MoveDownBlock] = TextEditor::Shortcut(ImGuiKey_PageDown, -1, 0, 0, 0);			// PAGE DOWN
-		ret[(int)TextEditor::ShortcutID::SelectDownBlock] = TextEditor::Shortcut(ImGuiKey_PageDown, -1, 0, 0, 1);		// SHIFT + PAGE DOWN
-		ret[(int)TextEditor::ShortcutID::MoveTop] = TextEditor::Shortcut(ImGuiKey_Home, -1, 0, 1, 0);					// CTRL + HOME
-		ret[(int)TextEditor::ShortcutID::SelectTop] = TextEditor::Shortcut(ImGuiKey_Home, -1, 0, 1, 1);					// CTRL + SHIFT + HOME
-		ret[(int)TextEditor::ShortcutID::MoveBottom] = TextEditor::Shortcut(ImGuiKey_End, -1, 0, 1, 0);					// CTRL + END
-		ret[(int)TextEditor::ShortcutID::SelectBottom] = TextEditor::Shortcut(ImGuiKey_End, -1, 0, 1, 1);				// CTRL + SHIFT + END
-		ret[(int)TextEditor::ShortcutID::MoveStartLine] = TextEditor::Shortcut(ImGuiKey_Home, -1, 0, 0, 0);				// HOME
-		ret[(int)TextEditor::ShortcutID::SelectStartLine] = TextEditor::Shortcut(ImGuiKey_Home, -1, 0, 0, 1);			// SHIFT + HOME
-		ret[(int)TextEditor::ShortcutID::MoveEndLine] = TextEditor::Shortcut(ImGuiKey_End, -1, 0, 0, 0);				// END
-		ret[(int)TextEditor::ShortcutID::SelectEndLine] = TextEditor::Shortcut(ImGuiKey_End, -1, 0, 0, 1);				// SHIFT + END
-		ret[(int)TextEditor::ShortcutID::ForwardDelete] = TextEditor::Shortcut(ImGuiKey_Delete, -1, 0, 0, 0);			// DELETE
-		ret[(int)TextEditor::ShortcutID::ForwardDeleteWord] = TextEditor::Shortcut(ImGuiKey_Delete, -1, 0, 1, 0);		// CTRL + DELETE
-		ret[(int)TextEditor::ShortcutID::DeleteRight] = TextEditor::Shortcut(ImGuiKey_Delete, -1, 0, 0, 1);				// SHIFT+BACKSPACE
-		ret[(int)TextEditor::ShortcutID::BackwardDelete] = TextEditor::Shortcut(ImGuiKey_Backspace, -1, 0, 0, 0);		// BACKSPACE
-		ret[(int)TextEditor::ShortcutID::BackwardDeleteWord] = TextEditor::Shortcut(ImGuiKey_Backspace, -1, 0, 1, 0);	// CTRL + BACKSPACE
-		ret[(int)TextEditor::ShortcutID::DeleteLeft] = TextEditor::Shortcut(ImGuiKey_Backspace, -1, 0, 0, 1);			// SHIFT+BACKSPACE
-		ret[(int)TextEditor::ShortcutID::OverwriteCursor] = TextEditor::Shortcut(ImGuiKey_Insert, -1, 0, 0, 0);			// INSERT
-		ret[(int)TextEditor::ShortcutID::Copy] = TextEditor::Shortcut(ImGuiKey_C, -1, 0, 1, 0);							// CTRL+C
-		ret[(int)TextEditor::ShortcutID::Paste] = TextEditor::Shortcut(ImGuiKey_V, -1, 0, 1, 0);						// CTRL+V
-		ret[(int)TextEditor::ShortcutID::Cut] = TextEditor::Shortcut(ImGuiKey_X, -1, 0, 1, 0);							// CTRL+X
-		ret[(int)TextEditor::ShortcutID::SelectAll] = TextEditor::Shortcut(ImGuiKey_A, -1, 0, 1, 0);					// CTRL+A
-		ret[(int)TextEditor::ShortcutID::AutocompleteOpen] = TextEditor::Shortcut(ImGuiKey_Space, -1, 0, 1, 0);			// CTRL+SPACE
-		ret[(int)TextEditor::ShortcutID::AutocompleteSelect] = TextEditor::Shortcut(ImGuiKey_Tab, -1, 0, 0, 0);			// TAB
-		ret[(int)TextEditor::ShortcutID::AutocompleteSelect] = TextEditor::Shortcut(ImGuiKey_Enter, -1, 0, 0, 0);		// TAB
-		ret[(int)TextEditor::ShortcutID::AutocompleteSelectActive] = TextEditor::Shortcut(ImGuiKey_Enter, -1, 0, 0, 0); // RETURN
-		ret[(int)TextEditor::ShortcutID::AutocompleteUp] = TextEditor::Shortcut(ImGuiKey_UpArrow, -1, 0, 0, 0);			// UP ARROW
-		ret[(int)TextEditor::ShortcutID::AutocompleteDown] = TextEditor::Shortcut(ImGuiKey_DownArrow, -1, 0, 0, 0);		// DOWN ARROW
-		ret[(int)TextEditor::ShortcutID::NewLine] = TextEditor::Shortcut(ImGuiKey_Enter, -1, 0, 0, 0);					// RETURN
-		ret[(int)TextEditor::ShortcutID::Indent] = TextEditor::Shortcut(ImGuiKey_Tab, -1, 0, 0, 0);						// TAB
-		ret[(int)TextEditor::ShortcutID::Unindent] = TextEditor::Shortcut(ImGuiKey_Tab, -1, 0, 0, 1);					// SHIFT + TAB
-		ret[(int)TextEditor::ShortcutID::Find] = TextEditor::Shortcut(ImGuiKey_F, -1, 0, 1, 0);							// CTRL+F
-		ret[(int)TextEditor::ShortcutID::Replace] = TextEditor::Shortcut(ImGuiKey_H, -1, 0, 1, 0);						// CTRL+H
-		ret[(int)TextEditor::ShortcutID::FindNext] = TextEditor::Shortcut(ImGuiKey_F3, -1, 0, 0, 0);					// F3
-		ret[(int)TextEditor::ShortcutID::DebugStep] = TextEditor::Shortcut(ImGuiKey_F10, -1, 0, 0, 0);					// F10
-		ret[(int)TextEditor::ShortcutID::DebugStepInto] = TextEditor::Shortcut(ImGuiKey_F11, -1, 0, 0, 0);				// F11
-		ret[(int)TextEditor::ShortcutID::DebugStepOut] = TextEditor::Shortcut(ImGuiKey_F11, -1, 0, 0, 1);				// SHIFT+F11
-		ret[(int)TextEditor::ShortcutID::DebugContinue] = TextEditor::Shortcut(ImGuiKey_F5, -1, 0, 0, 0);				// F5
-		ret[(int)TextEditor::ShortcutID::DebugStop] = TextEditor::Shortcut(ImGuiKey_F5, -1, 0, 0, 1);					// SHIFT+F5
-		ret[(int)TextEditor::ShortcutID::DebugBreakpoint] = TextEditor::Shortcut(ImGuiKey_F9, -1, 0, 0, 0);				// F9
-		ret[(int)TextEditor::ShortcutID::DebugJumpHere] = TextEditor::Shortcut(ImGuiKey_H, -1, 1, 1, 0);				// CTRL+ALT+H
-
+		static bool inited = false;
+		static std::vector<TextEditor::Shortcut> ret((int)TextEditor::ShortcutID::Count);
+		if(!inited)
+		{
+			inited = true;
+			//					Action															Key					key2 alt ctrl shift
+			ret[(int)TextEditor::ShortcutID::Undo] 						= TextEditor::Shortcut(ImGuiKey_Z			, -1, 0, 1, 0);		// CTRL+Z
+			ret[(int)TextEditor::ShortcutID::Redo] 						= TextEditor::Shortcut(ImGuiKey_Y			, -1, 0, 1, 0);		// CTRL+Y
+			ret[(int)TextEditor::ShortcutID::MoveUp] 					= TextEditor::Shortcut(ImGuiKey_UpArrow		, -1, 0, 0, 0);		// UP ARROW
+			ret[(int)TextEditor::ShortcutID::SelectUp] 					= TextEditor::Shortcut(ImGuiKey_UpArrow		, -1, 0, 0, 1);		// SHIFT + UP ARROW
+			ret[(int)TextEditor::ShortcutID::MoveDown] 					= TextEditor::Shortcut(ImGuiKey_DownArrow	, -1, 0, 0, 0);		// DOWN ARROW
+			ret[(int)TextEditor::ShortcutID::SelectDown] 				= TextEditor::Shortcut(ImGuiKey_DownArrow	, -1, 0, 0, 1);		// SHIFT + DOWN ARROW
+			ret[(int)TextEditor::ShortcutID::MoveLeft] 					= TextEditor::Shortcut(ImGuiKey_LeftArrow	, -1, 0, 0, 0);		// LEFT ARROW (+ SHIFT/CTRL)
+			ret[(int)TextEditor::ShortcutID::SelectLeft] 				= TextEditor::Shortcut(ImGuiKey_LeftArrow	, -1, 0, 0, 1);		// SHIFT + LEFT ARROW
+			ret[(int)TextEditor::ShortcutID::MoveWordLeft] 				= TextEditor::Shortcut(ImGuiKey_LeftArrow	, -1, 0, 1, 0);		// CTRL + LEFT ARROW
+			ret[(int)TextEditor::ShortcutID::SelectWordLeft] 			= TextEditor::Shortcut(ImGuiKey_LeftArrow	, -1, 0, 1, 1);		// CTRL + SHIFT + LEFT ARROW
+			ret[(int)TextEditor::ShortcutID::MoveRight] 				= TextEditor::Shortcut(ImGuiKey_RightArrow	, -1, 0, 0, 0);		// RIGHT ARROW
+			ret[(int)TextEditor::ShortcutID::SelectRight] 				= TextEditor::Shortcut(ImGuiKey_RightArrow	, -1, 0, 0, 1);		// SHIFT + RIGHT ARROW
+			ret[(int)TextEditor::ShortcutID::MoveWordRight] 			= TextEditor::Shortcut(ImGuiKey_RightArrow	, -1, 0, 1, 0);		// CTRL + RIGHT ARROW
+			ret[(int)TextEditor::ShortcutID::SelectWordRight] 			= TextEditor::Shortcut(ImGuiKey_RightArrow	, -1, 0, 1, 1);		// CTRL + SHIFT + RIGHT ARROW
+			ret[(int)TextEditor::ShortcutID::MoveUpBlock] 				= TextEditor::Shortcut(ImGuiKey_PageUp		, -1, 0, 0, 0);		// PAGE UP
+			ret[(int)TextEditor::ShortcutID::SelectUpBlock] 			= TextEditor::Shortcut(ImGuiKey_PageUp		, -1, 0, 0, 1);		// SHIFT + PAGE UP
+			ret[(int)TextEditor::ShortcutID::MoveDownBlock] 			= TextEditor::Shortcut(ImGuiKey_PageDown	, -1, 0, 0, 0);		// PAGE DOWN
+			ret[(int)TextEditor::ShortcutID::SelectDownBlock] 			= TextEditor::Shortcut(ImGuiKey_PageDown	, -1, 0, 0, 1);		// SHIFT + PAGE DOWN
+			ret[(int)TextEditor::ShortcutID::MoveTop] 					= TextEditor::Shortcut(ImGuiKey_Home		, -1, 0, 1, 0);		// CTRL + HOME
+			ret[(int)TextEditor::ShortcutID::SelectTop] 				= TextEditor::Shortcut(ImGuiKey_Home		, -1, 0, 1, 1);		// CTRL + SHIFT + HOME
+			ret[(int)TextEditor::ShortcutID::MoveBottom] 				= TextEditor::Shortcut(ImGuiKey_End			, -1, 0, 1, 0);		// CTRL + END
+			ret[(int)TextEditor::ShortcutID::SelectBottom] 				= TextEditor::Shortcut(ImGuiKey_End			, -1, 0, 1, 1);		// CTRL + SHIFT + END
+			ret[(int)TextEditor::ShortcutID::MoveStartLine] 			= TextEditor::Shortcut(ImGuiKey_Home		, -1, 0, 0, 0);		// HOME
+			ret[(int)TextEditor::ShortcutID::SelectStartLine] 			= TextEditor::Shortcut(ImGuiKey_Home		, -1, 0, 0, 1);		// SHIFT + HOME
+			ret[(int)TextEditor::ShortcutID::MoveEndLine] 				= TextEditor::Shortcut(ImGuiKey_End			, -1, 0, 0, 0);		// END
+			ret[(int)TextEditor::ShortcutID::SelectEndLine] 			= TextEditor::Shortcut(ImGuiKey_End			, -1, 0, 0, 1);		// SHIFT + END
+			ret[(int)TextEditor::ShortcutID::ForwardDelete] 			= TextEditor::Shortcut(ImGuiKey_Delete		, -1, 0, 0, 0);		// DELETE
+			ret[(int)TextEditor::ShortcutID::ForwardDeleteWord] 		= TextEditor::Shortcut(ImGuiKey_Delete		, -1, 0, 1, 0);		// CTRL + DELETE
+			ret[(int)TextEditor::ShortcutID::DeleteRight] 				= TextEditor::Shortcut(ImGuiKey_Delete		, -1, 0, 0, 1);		// SHIFT+BACKSPACE
+			ret[(int)TextEditor::ShortcutID::BackwardDelete] 			= TextEditor::Shortcut(ImGuiKey_Backspace	, -1, 0, 0, 0);		// BACKSPACE
+			ret[(int)TextEditor::ShortcutID::BackwardDeleteWord] 		= TextEditor::Shortcut(ImGuiKey_Backspace	, -1, 0, 1, 0);		// CTRL + BACKSPACE
+			ret[(int)TextEditor::ShortcutID::DeleteLeft] 				= TextEditor::Shortcut(ImGuiKey_Backspace	, -1, 0, 0, 1);		// SHIFT+BACKSPACE
+			ret[(int)TextEditor::ShortcutID::OverwriteCursor] 			= TextEditor::Shortcut(ImGuiKey_Insert		, -1, 0, 0, 0);		// INSERT
+			ret[(int)TextEditor::ShortcutID::Copy] 						= TextEditor::Shortcut(ImGuiKey_C			, -1, 0, 1, 0);		// CTRL+C
+			ret[(int)TextEditor::ShortcutID::Paste] 					= TextEditor::Shortcut(ImGuiKey_V			, -1, 0, 1, 0);		// CTRL+V
+			ret[(int)TextEditor::ShortcutID::Cut] 						= TextEditor::Shortcut(ImGuiKey_X			, -1, 0, 1, 0);		// CTRL+X
+			ret[(int)TextEditor::ShortcutID::SelectAll] 				= TextEditor::Shortcut(ImGuiKey_A			, -1, 0, 1, 0);		// CTRL+A
+			ret[(int)TextEditor::ShortcutID::AutocompleteOpen] 			= TextEditor::Shortcut(ImGuiKey_Space		, -1, 0, 1, 0);		// CTRL+SPACE
+			ret[(int)TextEditor::ShortcutID::AutocompleteSelect] 		= TextEditor::Shortcut(ImGuiKey_Tab			, -1, 0, 0, 0);		// TAB
+			ret[(int)TextEditor::ShortcutID::AutocompleteSelect] 		= TextEditor::Shortcut(ImGuiKey_Enter		, -1, 0, 0, 0);		// RETURN
+			ret[(int)TextEditor::ShortcutID::AutocompleteSelectActive] 	= TextEditor::Shortcut(ImGuiKey_Enter		, -1, 0, 0, 0);		// RETURN
+			ret[(int)TextEditor::ShortcutID::AutocompleteUp] 			= TextEditor::Shortcut(ImGuiKey_UpArrow		, -1, 0, 0, 0);		// UP ARROW
+			ret[(int)TextEditor::ShortcutID::AutocompleteDown] 			= TextEditor::Shortcut(ImGuiKey_DownArrow	, -1, 0, 0, 0);		// DOWN ARROW
+			ret[(int)TextEditor::ShortcutID::NewLine] 					= TextEditor::Shortcut(ImGuiKey_Enter		, -1, 0, 0, 0);		// RETURN
+			ret[(int)TextEditor::ShortcutID::Indent] 					= TextEditor::Shortcut(ImGuiKey_Tab			, -1, 0, 0, 0);		// TAB
+			ret[(int)TextEditor::ShortcutID::Unindent] 					= TextEditor::Shortcut(ImGuiKey_Tab			, -1, 0, 0, 1);		// SHIFT + TAB
+			ret[(int)TextEditor::ShortcutID::Find] 						= TextEditor::Shortcut(ImGuiKey_F			, -1, 0, 1, 0);		// CTRL+F
+			ret[(int)TextEditor::ShortcutID::Replace] 					= TextEditor::Shortcut(ImGuiKey_H			, -1, 0, 1, 0);		// CTRL+H
+			ret[(int)TextEditor::ShortcutID::FindNext] 					= TextEditor::Shortcut(ImGuiKey_F3			, -1, 0, 0, 0);		// F3
+			ret[(int)TextEditor::ShortcutID::DebugStep] 				= TextEditor::Shortcut(ImGuiKey_F10			, -1, 0, 0, 0);		// F10
+			ret[(int)TextEditor::ShortcutID::DebugStepInto] 			= TextEditor::Shortcut(ImGuiKey_F11			, -1, 0, 0, 0);		// F11
+			ret[(int)TextEditor::ShortcutID::DebugStepOut] 				= TextEditor::Shortcut(ImGuiKey_F11			, -1, 0, 0, 1);		// SHIFT+F11
+			ret[(int)TextEditor::ShortcutID::DebugContinue] 			= TextEditor::Shortcut(ImGuiKey_F5			, -1, 0, 0, 0);		// F5
+			ret[(int)TextEditor::ShortcutID::DebugStop] 				= TextEditor::Shortcut(ImGuiKey_F5			, -1, 0, 0, 1);		// SHIFT+F5
+			ret[(int)TextEditor::ShortcutID::DebugBreakpoint] 			= TextEditor::Shortcut(ImGuiKey_F9			, -1, 0, 0, 0);		// F9
+			ret[(int)TextEditor::ShortcutID::DebugJumpHere] 			= TextEditor::Shortcut(ImGuiKey_H			, -1, 1, 1, 0);		// CTRL+ALT+H
+		}
 		return ret;
 	}
 
@@ -928,9 +974,9 @@ namespace IDE
 			io.WantTextInput = true;
 
 			ShortcutID actionID = ShortcutID::Count;
-			for (int i = 0; i < m_shortcuts.size(); i++)
+			for (int i = 0; i < mShortcuts.size(); i++)
 			{
-				auto sct = m_shortcuts[i];
+				auto sct = mShortcuts[i];
 
 				if (sct.Key1 == -1)
 					continue;
@@ -2390,9 +2436,9 @@ namespace IDE
 			auto shift = io.KeyShift;
 			auto ctrl = io.ConfigMacOSXBehaviors ? io.KeySuper : io.KeyCtrl;
 			auto alt = io.ConfigMacOSXBehaviors ? io.KeyCtrl : io.KeyAlt;
-			for (int i = 0; i < m_shortcuts.size(); i++)
+			for (int i = 0; i < mShortcuts.size(); i++)
 			{
-				auto sct = m_shortcuts[i];
+				auto sct = mShortcuts[i];
 
 				if (sct.Key1 == -1)
 					continue;
@@ -3565,14 +3611,14 @@ namespace IDE
 
 	void TextEditor::SetShortcut(TextEditor::ShortcutID id, Shortcut s)
 	{
-		m_shortcuts[(int)id].Key1 = s.Key1;
-		m_shortcuts[(int)id].Key2 = s.Key2;
-		if (!m_shortcuts[(int)id].Ctrl)
-			m_shortcuts[(int)id].Ctrl = s.Ctrl;
-		if (!m_shortcuts[(int)id].Shift)
-			m_shortcuts[(int)id].Shift = s.Shift;
-		if (!m_shortcuts[(int)id].Alt)
-			m_shortcuts[(int)id].Alt = s.Alt;
+		mShortcuts[(int)id].Key1 = s.Key1;
+		mShortcuts[(int)id].Key2 = s.Key2;
+		if (!mShortcuts[(int)id].Ctrl)
+			mShortcuts[(int)id].Ctrl = s.Ctrl;
+		if (!mShortcuts[(int)id].Shift)
+			mShortcuts[(int)id].Shift = s.Shift;
+		if (!mShortcuts[(int)id].Alt)
+			mShortcuts[(int)id].Alt = s.Alt;
 	}
 
 	void TextEditor::Copy()
@@ -4581,445 +4627,6 @@ namespace IDE
 		return langDef;
 	}
 
-	const TextEditor::LanguageDefinition &TextEditor::LanguageDefinition::HLSL()
-	{
-		static bool inited = false;
-		static LanguageDefinition langDef;
-		if (!inited)
-		{
-			static const char *const keywords[] = {
-				"AppendStructuredBuffer", "asm", "asm_fragment", "BlendState", "bool", "break", "Buffer", "ByteAddressBuffer", "case", "cbuffer", "centroid", "class", "column_major", "compile", "compile_fragment",
-				"CompileShader", "const", "continue", "ComputeShader", "ConsumeStructuredBuffer", "default", "DepthStencilState", "DepthStencilView", "discard", "do", "double", "DomainShader", "dword", "else",
-				"export", "extern", "false", "float", "for", "fxgroup", "GeometryShader", "groupshared", "half", "Hullshader", "if", "in", "inline", "inout", "InputPatch", "int", "interface", "line", "lineadj",
-				"linear", "LineStream", "matrix", "min16float", "min10float", "min16int", "min12int", "min16uint", "namespace", "nointerpolation", "noperspective", "NULL", "out", "OutputPatch", "packoffset",
-				"pass", "pixelfragment", "PixelShader", "point", "PointStream", "precise", "RasterizerState", "RenderTargetView", "return", "register", "row_major", "RWBuffer", "RWByteAddressBuffer", "RWStructuredBuffer",
-				"RWTexture1D", "RWTexture1DArray", "RWTexture2D", "RWTexture2DArray", "RWTexture3D", "sample", "sampler", "SamplerState", "SamplerComparisonState", "shared", "snorm", "stateblock", "stateblock_state",
-				"static", "string", "struct", "switch", "StructuredBuffer", "tbuffer", "technique", "technique10", "technique11", "texture", "Texture1D", "Texture1DArray", "Texture2D", "Texture2DArray", "Texture2DMS",
-				"Texture2DMSArray", "Texture3D", "TextureCube", "TextureCubeArray", "true", "typedef", "triangle", "triangleadj", "TriangleStream", "uint", "uniform", "unorm", "unsigned", "vector", "vertexfragment",
-				"VertexShader", "void", "volatile", "while",
-				"bool1", "bool2", "bool3", "bool4", "double1", "double2", "double3", "double4", "float1", "float2", "float3", "float4", "int1", "int2", "int3", "int4", "in", "out", "inout",
-				"uint1", "uint2", "uint3", "uint4", "dword1", "dword2", "dword3", "dword4", "half1", "half2", "half3", "half4",
-				"float1x1", "float2x1", "float3x1", "float4x1", "float1x2", "float2x2", "float3x2", "float4x2",
-				"float1x3", "float2x3", "float3x3", "float4x3", "float1x4", "float2x4", "float3x4", "float4x4",
-				"half1x1", "half2x1", "half3x1", "half4x1", "half1x2", "half2x2", "half3x2", "half4x2",
-				"half1x3", "half2x3", "half3x3", "half4x3", "half1x4", "half2x4", "half3x4", "half4x4",
-				"SHADERED_WEB", "SHADERED_DESKTOP", "SHADERED_VERSION"};
-			for (auto &k : keywords)
-				langDef.mKeywords.insert(k);
-
-			m_HLSLDocumentation(langDef.mIdentifiers);
-
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[ \\t]*#[ \\t]*[a-zA-Z_]+", PaletteIndex::Preprocessor));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("L?\\\"(\\\\.|[^\\\"])*\\\"", PaletteIndex::String));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("\\'\\\\?[^\\']\\'", PaletteIndex::CharLiteral));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+)([eE][+-]?[0-9]+)?[fF]?", PaletteIndex::Number));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[+-]?[0-9]+[Uu]?[lL]?[lL]?", PaletteIndex::Number));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("0[0-7]+[Uu]?[lL]?[lL]?", PaletteIndex::Number));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("0[xX][0-9a-fA-F]+[uU]?[lL]?[lL]?", PaletteIndex::Number));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[a-zA-Z_][a-zA-Z0-9_]*", PaletteIndex::Identifier));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[\\[\\]\\{\\}\\!\\%\\^\\&\\*\\(\\)\\-\\+\\=\\~\\|\\<\\>\\?\\/\\;\\,\\.]", PaletteIndex::Punctuation));
-
-			langDef.mCommentStart = "/*";
-			langDef.mCommentEnd = "*/";
-			langDef.mSingleLineComment = "//";
-
-			langDef.mCaseSensitive = true;
-			langDef.mAutoIndentation = true;
-
-			langDef.mName = "HLSL";
-
-			inited = true;
-		}
-		return langDef;
-	}
-	void TextEditor::LanguageDefinition::m_HLSLDocumentation(Identifiers &idents)
-	{
-		/* SOURCE: https://docs.microsoft.com/en-us/windows/desktop/direct3dhlsl/dx-graphics-hlsl-intrinsic-functions */
-
-		idents.insert(std::make_pair("abort", Identifier("Terminates the current draw or dispatch call being executed.")));
-		idents.insert(std::make_pair("abs", Identifier("Absolute value (per component).")));
-		idents.insert(std::make_pair("acos", Identifier("Returns the arccosine of each component of x.")));
-		idents.insert(std::make_pair("all", Identifier("Test if all components of x are nonzero.")));
-		idents.insert(std::make_pair("AllMemoryBarrier", Identifier("Blocks execution of all threads in a group until all memory accesses have been completed.")));
-		idents.insert(std::make_pair("AllMemoryBarrierWithGroupSync", Identifier("Blocks execution of all threads in a group until all memory accesses have been completed and all threads in the group have reached this call.")));
-		idents.insert(std::make_pair("any", Identifier("Test if any component of x is nonzero.")));
-		idents.insert(std::make_pair("asdouble", Identifier("Reinterprets a cast value into a double.")));
-		idents.insert(std::make_pair("asfloat", Identifier("Convert the input type to a float.")));
-		idents.insert(std::make_pair("asin", Identifier("Returns the arcsine of each component of x.")));
-		idents.insert(std::make_pair("asint", Identifier("Convert the input type to an integer.")));
-		idents.insert(std::make_pair("asuint", Identifier("Convert the input type to an unsigned integer.")));
-		idents.insert(std::make_pair("atan", Identifier("Returns the arctangent of x.")));
-		idents.insert(std::make_pair("atan2", Identifier("Returns the arctangent of of two values (x,y).")));
-		idents.insert(std::make_pair("ceil", Identifier("Returns the smallest integer which is greater than or equal to x.")));
-		idents.insert(std::make_pair("CheckAccessFullyMapped", Identifier("Determines whether all values from a Sample or Load operation accessed mapped tiles in a tiled resource.")));
-		idents.insert(std::make_pair("clamp", Identifier("Clamps x to the range [min, max].")));
-		idents.insert(std::make_pair("clip", Identifier("Discards the current pixel, if any component of x is less than zero.")));
-		idents.insert(std::make_pair("cos", Identifier("Returns the cosine of x.")));
-		idents.insert(std::make_pair("cosh", Identifier("Returns the hyperbolic cosine of x.")));
-		idents.insert(std::make_pair("countbits", Identifier("Counts the number of bits (per component) in the input integer.")));
-		idents.insert(std::make_pair("cross", Identifier("Returns the cross product of two 3D vectors.")));
-		idents.insert(std::make_pair("D3DCOLORtoUBYTE4", Identifier("Swizzles and scales components of the 4D vector x to compensate for the lack of UBYTE4 support in some hardware.")));
-		idents.insert(std::make_pair("ddx", Identifier("Returns the partial derivative of x with respect to the screen-space x-coordinate.")));
-		idents.insert(std::make_pair("ddx_coarse", Identifier("Computes a low precision partial derivative with respect to the screen-space x-coordinate.")));
-		idents.insert(std::make_pair("ddx_fine", Identifier("Computes a high precision partial derivative with respect to the screen-space x-coordinate.")));
-		idents.insert(std::make_pair("ddy", Identifier("Returns the partial derivative of x with respect to the screen-space y-coordinate.")));
-		idents.insert(std::make_pair("ddy_coarse", Identifier("Returns the partial derivative of x with respect to the screen-space y-coordinate.")));
-		idents.insert(std::make_pair("ddy_fine", Identifier("Computes a high precision partial derivative with respect to the screen-space y-coordinate.")));
-		idents.insert(std::make_pair("degrees", Identifier("Converts x from radians to degrees.")));
-		idents.insert(std::make_pair("determinant", Identifier("Returns the determinant of the square matrix m.")));
-		idents.insert(std::make_pair("DeviceMemoryBarrier", Identifier("Blocks execution of all threads in a group until all device memory accesses have been completed.")));
-		idents.insert(std::make_pair("DeviceMemoryBarrierWithGroupSync", Identifier("Blocks execution of all threads in a group until all device memory accesses have been completed and all threads in the group have reached this call.")));
-		idents.insert(std::make_pair("distance", Identifier("Returns the distance between two points.")));
-		idents.insert(std::make_pair("dot", Identifier("Returns the dot product of two vectors.")));
-		idents.insert(std::make_pair("dst", Identifier("Calculates a distance vector.")));
-		idents.insert(std::make_pair("errorf", Identifier("Submits an error message to the information queue.")));
-		idents.insert(std::make_pair("EvaluateAttributeAtCentroid", Identifier("Evaluates at the pixel centroid.")));
-		idents.insert(std::make_pair("EvaluateAttributeAtSample", Identifier("Evaluates at the indexed sample location.")));
-		idents.insert(std::make_pair("EvaluateAttributeSnapped", Identifier("Evaluates at the pixel centroid with an offset.")));
-		idents.insert(std::make_pair("exp", Identifier("Returns the base-e exponent.")));
-		idents.insert(std::make_pair("exp2", Identifier("Base 2 exponent(per component).")));
-		idents.insert(std::make_pair("f16tof32", Identifier("Converts the float16 stored in the low-half of the uint to a float.")));
-		idents.insert(std::make_pair("f32tof16", Identifier("Converts an input into a float16 type.")));
-		idents.insert(std::make_pair("faceforward", Identifier("Returns -n * sign(dot(i, ng)).")));
-		idents.insert(std::make_pair("firstbithigh", Identifier("Gets the location of the first set bit starting from the highest order bit and working downward, per component.")));
-		idents.insert(std::make_pair("firstbitlow", Identifier("Returns the location of the first set bit starting from the lowest order bit and working upward, per component.")));
-		idents.insert(std::make_pair("floor", Identifier("Returns the greatest integer which is less than or equal to x.")));
-		idents.insert(std::make_pair("fma", Identifier("Returns the double-precision fused multiply-addition of a * b + c.")));
-		idents.insert(std::make_pair("fmod", Identifier("Returns the floating point remainder of x/y.")));
-		idents.insert(std::make_pair("frac", Identifier("Returns the fractional part of x.")));
-		idents.insert(std::make_pair("frexp", Identifier("Returns the mantissa and exponent of x.")));
-		idents.insert(std::make_pair("fwidth", Identifier("Returns abs(ddx(x)) + abs(ddy(x))")));
-		idents.insert(std::make_pair("GetRenderTargetSampleCount", Identifier("Returns the number of render-target samples.")));
-		idents.insert(std::make_pair("GetRenderTargetSamplePosition", Identifier("Returns a sample position (x,y) for a given sample index.")));
-		idents.insert(std::make_pair("GroupMemoryBarrier", Identifier("Blocks execution of all threads in a group until all group shared accesses have been completed.")));
-		idents.insert(std::make_pair("GroupMemoryBarrierWithGroupSync", Identifier("Blocks execution of all threads in a group until all group shared accesses have been completed and all threads in the group have reached this call.")));
-		idents.insert(std::make_pair("InterlockedAdd", Identifier("Performs a guaranteed atomic add of value to the dest resource variable.")));
-		idents.insert(std::make_pair("InterlockedAnd", Identifier("Performs a guaranteed atomic and.")));
-		idents.insert(std::make_pair("InterlockedCompareExchange", Identifier("Atomically compares the input to the comparison value and exchanges the result.")));
-		idents.insert(std::make_pair("InterlockedCompareStore", Identifier("Atomically compares the input to the comparison value.")));
-		idents.insert(std::make_pair("InterlockedExchange", Identifier("Assigns value to dest and returns the original value.")));
-		idents.insert(std::make_pair("InterlockedMax", Identifier("Performs a guaranteed atomic max.")));
-		idents.insert(std::make_pair("InterlockedMin", Identifier("Performs a guaranteed atomic min.")));
-		idents.insert(std::make_pair("InterlockedOr", Identifier("Performs a guaranteed atomic or.")));
-		idents.insert(std::make_pair("InterlockedXor", Identifier("Performs a guaranteed atomic xor.")));
-		idents.insert(std::make_pair("isfinite", Identifier("Returns true if x is finite, false otherwise.")));
-		idents.insert(std::make_pair("isinf", Identifier("Returns true if x is +INF or -INF, false otherwise.")));
-		idents.insert(std::make_pair("isnan", Identifier("Returns true if x is NAN or QNAN, false otherwise.")));
-		idents.insert(std::make_pair("ldexp", Identifier("Returns x * 2exp")));
-		idents.insert(std::make_pair("length", Identifier("Returns the length of the vector v.")));
-		idents.insert(std::make_pair("lerp", Identifier("Returns x + s(y - x).")));
-		idents.insert(std::make_pair("lit", Identifier("Returns a lighting vector (ambient, diffuse, specular, 1)")));
-		idents.insert(std::make_pair("log", Identifier("Returns the base-e logarithm of x.")));
-		idents.insert(std::make_pair("log10", Identifier("Returns the base-10 logarithm of x.")));
-		idents.insert(std::make_pair("log2", Identifier("Returns the base - 2 logarithm of x.")));
-		idents.insert(std::make_pair("mad", Identifier("Performs an arithmetic multiply/add operation on three values.")));
-		idents.insert(std::make_pair("max", Identifier("Selects the greater of x and y.")));
-		idents.insert(std::make_pair("min", Identifier("Selects the lesser of x and y.")));
-		idents.insert(std::make_pair("modf", Identifier("Splits the value x into fractional and integer parts.")));
-		idents.insert(std::make_pair("msad4", Identifier("Compares a 4-byte reference value and an 8-byte source value and accumulates a vector of 4 sums.")));
-		idents.insert(std::make_pair("mul", Identifier("Performs matrix multiplication using x and y.")));
-		idents.insert(std::make_pair("noise", Identifier("Generates a random value using the Perlin-noise algorithm.")));
-		idents.insert(std::make_pair("normalize", Identifier("Returns a normalized vector.")));
-		idents.insert(std::make_pair("pow", Identifier("Returns x^n.")));
-		idents.insert(std::make_pair("printf", Identifier("Submits a custom shader message to the information queue.")));
-		idents.insert(std::make_pair("Process2DQuadTessFactorsAvg", Identifier("Generates the corrected tessellation factors for a quad patch.")));
-		idents.insert(std::make_pair("Process2DQuadTessFactorsMax", Identifier("Generates the corrected tessellation factors for a quad patch.")));
-		idents.insert(std::make_pair("Process2DQuadTessFactorsMin", Identifier("Generates the corrected tessellation factors for a quad patch.")));
-		idents.insert(std::make_pair("ProcessIsolineTessFactors", Identifier("Generates the rounded tessellation factors for an isoline.")));
-		idents.insert(std::make_pair("ProcessQuadTessFactorsAvg", Identifier("Generates the corrected tessellation factors for a quad patch.")));
-		idents.insert(std::make_pair("ProcessQuadTessFactorsMax", Identifier("Generates the corrected tessellation factors for a quad patch.")));
-		idents.insert(std::make_pair("ProcessQuadTessFactorsMin", Identifier("Generates the corrected tessellation factors for a quad patch.")));
-		idents.insert(std::make_pair("ProcessTriTessFactorsAvg", Identifier("Generates the corrected tessellation factors for a tri patch.")));
-		idents.insert(std::make_pair("ProcessTriTessFactorsMax", Identifier("Generates the corrected tessellation factors for a tri patch.")));
-		idents.insert(std::make_pair("ProcessTriTessFactorsMin", Identifier("Generates the corrected tessellation factors for a tri patch.")));
-		idents.insert(std::make_pair("radians", Identifier("Converts x from degrees to radians.")));
-		idents.insert(std::make_pair("rcp", Identifier("Calculates a fast, approximate, per-component reciprocal.")));
-		idents.insert(std::make_pair("reflect", Identifier("Returns a reflection vector.")));
-		idents.insert(std::make_pair("refract", Identifier("Returns the refraction vector.")));
-		idents.insert(std::make_pair("reversebits", Identifier("Reverses the order of the bits, per component.")));
-		idents.insert(std::make_pair("round", Identifier("Rounds x to the nearest integer")));
-		idents.insert(std::make_pair("rsqrt", Identifier("Returns 1 / sqrt(x)")));
-		idents.insert(std::make_pair("saturate", Identifier("Clamps x to the range [0, 1]")));
-		idents.insert(std::make_pair("sign", Identifier("Computes the sign of x.")));
-		idents.insert(std::make_pair("sin", Identifier("Returns the sine of x")));
-		idents.insert(std::make_pair("sincos", Identifier("Returns the sineand cosine of x.")));
-		idents.insert(std::make_pair("sinh", Identifier("Returns the hyperbolic sine of x")));
-		idents.insert(std::make_pair("smoothstep", Identifier("Returns a smooth Hermite interpolation between 0 and 1.")));
-		idents.insert(std::make_pair("sqrt", Identifier("Square root (per component)")));
-		idents.insert(std::make_pair("step", Identifier("Returns (x >= a) ? 1 : 0")));
-		idents.insert(std::make_pair("tan", Identifier("Returns the tangent of x")));
-		idents.insert(std::make_pair("tanh", Identifier("Returns the hyperbolic tangent of x")));
-		idents.insert(std::make_pair("tex1D", Identifier("1D texture lookup.")));
-		idents.insert(std::make_pair("tex1Dbias", Identifier("1D texture lookup with bias.")));
-		idents.insert(std::make_pair("tex1Dgrad", Identifier("1D texture lookup with a gradient.")));
-		idents.insert(std::make_pair("tex1Dlod", Identifier("1D texture lookup with LOD.")));
-		idents.insert(std::make_pair("tex1Dproj", Identifier("1D texture lookup with projective divide.")));
-		idents.insert(std::make_pair("tex2D", Identifier("2D texture lookup.")));
-		idents.insert(std::make_pair("tex2Dbias", Identifier("2D texture lookup with bias.")));
-		idents.insert(std::make_pair("tex2Dgrad", Identifier("2D texture lookup with a gradient.")));
-		idents.insert(std::make_pair("tex2Dlod", Identifier("2D texture lookup with LOD.")));
-		idents.insert(std::make_pair("tex2Dproj", Identifier("2D texture lookup with projective divide.")));
-		idents.insert(std::make_pair("tex3D", Identifier("3D texture lookup.")));
-		idents.insert(std::make_pair("tex3Dbias", Identifier("3D texture lookup with bias.")));
-		idents.insert(std::make_pair("tex3Dgrad", Identifier("3D texture lookup with a gradient.")));
-		idents.insert(std::make_pair("tex3Dlod", Identifier("3D texture lookup with LOD.")));
-		idents.insert(std::make_pair("tex3Dproj", Identifier("3D texture lookup with projective divide.")));
-		idents.insert(std::make_pair("texCUBE", Identifier("Cube texture lookup.")));
-		idents.insert(std::make_pair("texCUBEbias", Identifier("Cube texture lookup with bias.")));
-		idents.insert(std::make_pair("texCUBEgrad", Identifier("Cube texture lookup with a gradient.")));
-		idents.insert(std::make_pair("texCUBElod", Identifier("Cube texture lookup with LOD.")));
-		idents.insert(std::make_pair("texCUBEproj", Identifier("Cube texture lookup with projective divide.")));
-		idents.insert(std::make_pair("transpose", Identifier("Returns the transpose of the matrix m.")));
-		idents.insert(std::make_pair("trunc", Identifier("Truncates floating-point value(s) to integer value(s)")));
-	}
-
-	const TextEditor::LanguageDefinition &TextEditor::LanguageDefinition::GLSL()
-	{
-		static bool inited = false;
-		static LanguageDefinition langDef;
-		if (!inited)
-		{
-			static const char *const keywords[] = {
-				"auto", "break", "case", "char", "const", "continue", "default", "do", "double", "else", "enum", "extern", "float", "for", "goto", "if", "inline", "int", "long", "register", "restrict", "return", "short",
-				"signed", "sizeof", "static", "struct", "switch", "typedef", "union", "unsigned", "void", "volatile", "while", "_Alignas", "_Alignof", "_Atomic", "_Bool", "_Complex", "_Generic", "_Imaginary",
-				"_Noreturn", "_Static_assert", "_Thread_local", "attribute", "uniform", "varying", "layout", "centroid", "flat", "smooth", "noperspective", "patch", "sample", "subroutine", "in", "out", "inout",
-				"bool", "true", "false", "invariant", "mat2", "mat3", "mat4", "dmat2", "dmat3", "dmat4", "mat2x2", "mat2x3", "mat2x4", "dmat2x2", "dmat2x3", "dmat2x4", "mat3x2", "mat3x3", "mat3x4", "dmat3x2", "dmat3x3", "dmat3x4",
-				"mat4x2", "mat4x3", "mat4x4", "dmat4x2", "dmat4x3", "dmat4x4", "vec2", "vec3", "vec4", "ivec2", "ivec3", "ivec4", "bvec2", "bvec3", "bvec4", "dvec2", "dvec3", "dvec4", "uint", "uvec2", "uvec3", "uvec4",
-				"lowp", "mediump", "highp", "precision", "sampler1D", "sampler2D", "sampler3D", "samplerCube", "sampler1DShadow", "sampler2DShadow", "samplerCubeShadow", "sampler1DArray", "sampler2DArray", "sampler1DArrayShadow",
-				"sampler2DArrayShadow", "isampler1D", "isampler2D", "isampler3D", "isamplerCube", "isampler1DArray", "isampler2DArray", "usampler1D", "usampler2D", "usampler3D", "usamplerCube", "usampler1DArray", "usampler2DArray",
-				"sampler2DRect", "sampler2DRectShadow", "isampler2DRect", "usampler2DRect", "samplerBuffer", "isamplerBuffer", "usamplerBuffer", "sampler2DMS", "isampler2DMS", "usampler2DMS", "sampler2DMSArray", "isampler2DMSArray",
-				"usampler2DMSArray", "samplerCubeArray", "samplerCubeArrayShadow", "isamplerCubeArray", "usamplerCubeArray",
-				"SHADERED_WEB", "SHADERED_DESKTOP", "SHADERED_VERSION", "shared", "writeonly", "readonly", "image2D", "image1D", "image3D"};
-			for (auto &k : keywords)
-				langDef.mKeywords.insert(k);
-
-			m_GLSLDocumentation(langDef.mIdentifiers);
-
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[ \\t]*#[ \\t]*[a-zA-Z_]+", PaletteIndex::Preprocessor));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("L?\\\"(\\\\.|[^\\\"])*\\\"", PaletteIndex::String));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("\\'\\\\?[^\\']\\'", PaletteIndex::CharLiteral));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+)([eE][+-]?[0-9]+)?[fF]?", PaletteIndex::Number));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[+-]?[0-9]+[Uu]?[lL]?[lL]?", PaletteIndex::Number));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("0[0-7]+[Uu]?[lL]?[lL]?", PaletteIndex::Number));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("0[xX][0-9a-fA-F]+[uU]?[lL]?[lL]?", PaletteIndex::Number));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[a-zA-Z_][a-zA-Z0-9_]*", PaletteIndex::Identifier));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[\\[\\]\\{\\}\\!\\%\\^\\&\\*\\(\\)\\-\\+\\=\\~\\|\\<\\>\\?\\/\\;\\,\\.]", PaletteIndex::Punctuation));
-
-			langDef.mCommentStart = "/*";
-			langDef.mCommentEnd = "*/";
-			langDef.mSingleLineComment = "//";
-
-			langDef.mCaseSensitive = true;
-			langDef.mAutoIndentation = true;
-
-			langDef.mName = "GLSL";
-
-			inited = true;
-		}
-		return langDef;
-	}
-	void TextEditor::LanguageDefinition::m_GLSLDocumentation(Identifiers &idents)
-	{
-		/* SOURCE: https://docs.microsoft.com/en-us/windows/desktop/direct3dhlsl/dx-graphics-hlsl-intrinsic-functions */
-
-		idents.insert(std::make_pair("radians", Identifier("Converts x from degrees to radians.")));
-		idents.insert(std::make_pair("degrees", Identifier("Converts x from radians to degrees.")));
-		idents.insert(std::make_pair("sin", Identifier("Returns the sine of x")));
-		idents.insert(std::make_pair("cos", Identifier("Returns the cosine of x.")));
-		idents.insert(std::make_pair("tan", Identifier("Returns the tangent of x")));
-		idents.insert(std::make_pair("asin", Identifier("Returns the arcsine of each component of x.")));
-		idents.insert(std::make_pair("acos", Identifier("Returns the arccosine of each component of x.")));
-		idents.insert(std::make_pair("atan", Identifier("Returns the arctangent of x.")));
-		idents.insert(std::make_pair("sinh", Identifier("Returns the hyperbolic sine of x")));
-		idents.insert(std::make_pair("cosh", Identifier("Returns the hyperbolic cosine of x.")));
-		idents.insert(std::make_pair("tanh", Identifier("Returns the hyperbolic tangent of x")));
-		idents.insert(std::make_pair("asinh", Identifier("Returns the arc hyperbolic sine of x")));
-		idents.insert(std::make_pair("acosh", Identifier("Returns the arc hyperbolic cosine of x.")));
-		idents.insert(std::make_pair("atanh", Identifier("Returns the arc hyperbolic tangent of x")));
-		idents.insert(std::make_pair("pow", Identifier("Returns x^n.")));
-		idents.insert(std::make_pair("exp", Identifier("Returns the base-e exponent.")));
-		idents.insert(std::make_pair("exp2", Identifier("Base 2 exponent(per component).")));
-		idents.insert(std::make_pair("log", Identifier("Returns the base-e logarithm of x.")));
-		idents.insert(std::make_pair("log2", Identifier("Returns the base - 2 logarithm of x.")));
-		idents.insert(std::make_pair("sqrt", Identifier("Square root (per component).")));
-		idents.insert(std::make_pair("inversesqrt", Identifier("Returns rcp(sqrt(x)).")));
-		idents.insert(std::make_pair("abs", Identifier("Absolute value (per component).")));
-		idents.insert(std::make_pair("sign", Identifier("Computes the sign of x.")));
-		idents.insert(std::make_pair("floor", Identifier("Returns the greatest integer which is less than or equal to x.")));
-		idents.insert(std::make_pair("trunc", Identifier("Truncates floating-point value(s) to integer value(s)")));
-		idents.insert(std::make_pair("round", Identifier("Rounds x to the nearest integer")));
-		idents.insert(std::make_pair("roundEven", Identifier("Returns a value equal to the nearest integer to x. A fractional part of 0.5 will round toward the nearest even integer.")));
-		idents.insert(std::make_pair("ceil", Identifier("Returns the smallest integer which is greater than or equal to x.")));
-		idents.insert(std::make_pair("fract", Identifier("Returns the fractional part of x.")));
-		idents.insert(std::make_pair("mod", Identifier("Modulus. Returns x – y ∗ floor (x/y).")));
-		idents.insert(std::make_pair("modf", Identifier("Splits the value x into fractional and integer parts.")));
-		idents.insert(std::make_pair("max", Identifier("Selects the greater of x and y.")));
-		idents.insert(std::make_pair("min", Identifier("Selects the lesser of x and y.")));
-		idents.insert(std::make_pair("clamp", Identifier("Clamps x to the range [min, max].")));
-		idents.insert(std::make_pair("mix", Identifier("Returns x*(1-a)+y*a.")));
-		idents.insert(std::make_pair("isinf", Identifier("Returns true if x is +INF or -INF, false otherwise.")));
-		idents.insert(std::make_pair("isnan", Identifier("Returns true if x is NAN or QNAN, false otherwise.")));
-		idents.insert(std::make_pair("smoothstep", Identifier("Returns a smooth Hermite interpolation between 0 and 1.")));
-		idents.insert(std::make_pair("step", Identifier("Returns (x >= a) ? 1 : 0")));
-		idents.insert(std::make_pair("floatBitsToInt", Identifier("Returns a signed or unsigned integer value representing the encoding of a floating-point value. The floatingpoint value's bit-level representation is preserved.")));
-		idents.insert(std::make_pair("floatBitsToUint", Identifier("Returns a signed or unsigned integer value representing the encoding of a floating-point value. The floatingpoint value's bit-level representation is preserved.")));
-		idents.insert(std::make_pair("intBitsToFloat", Identifier("Returns a floating-point value corresponding to a signed or unsigned integer encoding of a floating-point value.")));
-		idents.insert(std::make_pair("uintBitsToFloat", Identifier("Returns a floating-point value corresponding to a signed or unsigned integer encoding of a floating-point value.")));
-		idents.insert(std::make_pair("fmod", Identifier("Returns the floating point remainder of x/y.")));
-		idents.insert(std::make_pair("fma", Identifier("Returns the double-precision fused multiply-addition of a * b + c.")));
-		idents.insert(std::make_pair("ldexp", Identifier("Returns x * 2exp")));
-		idents.insert(std::make_pair("packUnorm2x16", Identifier("First, converts each component of the normalized floating - point value v into 8 or 16bit integer values. Then, the results are packed into the returned 32bit unsigned integer.")));
-		idents.insert(std::make_pair("packUnorm4x8", Identifier("First, converts each component of the normalized floating - point value v into 8 or 16bit integer values. Then, the results are packed into the returned 32bit unsigned integer.")));
-		idents.insert(std::make_pair("packSnorm4x8", Identifier("First, converts each component of the normalized floating - point value v into 8 or 16bit integer values. Then, the results are packed into the returned 32bit unsigned integer.")));
-		idents.insert(std::make_pair("unpackUnorm2x16", Identifier("First, unpacks a single 32bit unsigned integer p into a pair of 16bit unsigned integers, four 8bit unsigned integers, or four 8bit signed integers.Then, each component is converted to a normalized floating point value to generate the returned two or four component vector.")));
-		idents.insert(std::make_pair("unpackUnorm4x8", Identifier("First, unpacks a single 32bit unsigned integer p into a pair of 16bit unsigned integers, four 8bit unsigned integers, or four 8bit signed integers.Then, each component is converted to a normalized floating point value to generate the returned two or four component vector.")));
-		idents.insert(std::make_pair("unpackSnorm4x8", Identifier("First, unpacks a single 32bit unsigned integer p into a pair of 16bit unsigned integers, four 8bit unsigned integers, or four 8bit signed integers.Then, each component is converted to a normalized floating point value to generate the returned two or four component vector.")));
-		idents.insert(std::make_pair("packDouble2x32", Identifier("Returns a double-precision value obtained by packing the components of v into a 64-bit value.")));
-		idents.insert(std::make_pair("unpackDouble2x32", Identifier("Returns a two-component unsigned integer vector representation of v.")));
-		idents.insert(std::make_pair("length", Identifier("Returns the length of the vector v.")));
-		idents.insert(std::make_pair("distance", Identifier("Returns the distance between two points.")));
-		idents.insert(std::make_pair("dot", Identifier("Returns the dot product of two vectors.")));
-		idents.insert(std::make_pair("cross", Identifier("Returns the cross product of two 3D vectors.")));
-		idents.insert(std::make_pair("normalize", Identifier("Returns a normalized vector.")));
-		idents.insert(std::make_pair("faceforward", Identifier("Returns -n * sign(dot(i, ng)).")));
-		idents.insert(std::make_pair("reflect", Identifier("Returns a reflection vector.")));
-		idents.insert(std::make_pair("refract", Identifier("Returns the refraction vector.")));
-		idents.insert(std::make_pair("matrixCompMult", Identifier("Multiply matrix x by matrix y component-wise.")));
-		idents.insert(std::make_pair("outerProduct", Identifier("Linear algebraic matrix multiply c * r.")));
-		idents.insert(std::make_pair("transpose", Identifier("Returns the transpose of the matrix m.")));
-		idents.insert(std::make_pair("determinant", Identifier("Returns the determinant of the square matrix m.")));
-		idents.insert(std::make_pair("inverse", Identifier("Returns a matrix that is the inverse of m.")));
-		idents.insert(std::make_pair("lessThan", Identifier("Returns the component-wise compare of x < y")));
-		idents.insert(std::make_pair("lessThanEqual", Identifier("Returns the component-wise compare of x <= y")));
-		idents.insert(std::make_pair("greaterThan", Identifier("Returns the component-wise compare of x > y")));
-		idents.insert(std::make_pair("greaterThanEqual", Identifier("Returns the component-wise compare of x >= y")));
-		idents.insert(std::make_pair("equal", Identifier("Returns the component-wise compare of x == y")));
-		idents.insert(std::make_pair("notEqual", Identifier("Returns the component-wise compare of x != y")));
-		idents.insert(std::make_pair("any", Identifier("Test if any component of x is nonzero.")));
-		idents.insert(std::make_pair("all", Identifier("Test if all components of x are nonzero.")));
-		idents.insert(std::make_pair("not", Identifier("Returns the component-wise logical complement of x.")));
-		idents.insert(std::make_pair("uaddCarry", Identifier("Adds 32bit unsigned integer x and y, returning the sum modulo 2^32.")));
-		idents.insert(std::make_pair("usubBorrow", Identifier("Subtracts the 32bit unsigned integer y from x, returning the difference if non-negatice, or 2^32 plus the difference otherwise.")));
-		idents.insert(std::make_pair("umulExtended", Identifier("Multiplies 32bit integers x and y, producing a 64bit result.")));
-		idents.insert(std::make_pair("imulExtended", Identifier("Multiplies 32bit integers x and y, producing a 64bit result.")));
-		idents.insert(std::make_pair("bitfieldExtract", Identifier("Extracts bits [offset, offset + bits - 1] from value, returning them in the least significant bits of the result.")));
-		idents.insert(std::make_pair("bitfieldInsert", Identifier("Returns the insertion the bits leas-significant bits of insert into base")));
-		idents.insert(std::make_pair("bitfieldReverse", Identifier("Returns the reversal of the bits of value.")));
-		idents.insert(std::make_pair("bitCount", Identifier("Returns the number of bits set to 1 in the binary representation of value.")));
-		idents.insert(std::make_pair("findLSB", Identifier("Returns the bit number of the least significant bit set to 1 in the binary representation of value.")));
-		idents.insert(std::make_pair("findMSB", Identifier("Returns the bit number of the most significant bit in the binary representation of value.")));
-		idents.insert(std::make_pair("textureSize", Identifier("Returns the dimensions of level lod  (if present) for the texture bound to sample.")));
-		idents.insert(std::make_pair("textureQueryLod", Identifier("Returns the mipmap array(s) that would be accessed in the x component of the return value.")));
-		idents.insert(std::make_pair("texture", Identifier("Use the texture coordinate P to do a texture lookup in the texture currently bound to sampler.")));
-		idents.insert(std::make_pair("textureProj", Identifier("Do a texture lookup with projection.")));
-		idents.insert(std::make_pair("textureLod", Identifier("Do a texture lookup as in texture but with explicit LOD.")));
-		idents.insert(std::make_pair("textureOffset", Identifier("Do a texture lookup as in texture but with offset added to the (u,v,w) texel coordinates before looking up each texel.")));
-		idents.insert(std::make_pair("texelFetch", Identifier("Use integer texture coordinate P to lookup a single texel from sampler.")));
-		idents.insert(std::make_pair("texelFetchOffset", Identifier("Fetch a single texel as in texelFetch offset by offset.")));
-		idents.insert(std::make_pair("texetureProjOffset", Identifier("Do a projective texture lookup as described in textureProj offset by offset as descrived in textureOffset.")));
-		idents.insert(std::make_pair("texetureLodOffset", Identifier("Do an offset texture lookup with explicit LOD.")));
-		idents.insert(std::make_pair("textureProjLod", Identifier("Do a projective texture lookup with explicit LOD.")));
-		idents.insert(std::make_pair("textureLodOffset", Identifier("Do an offset texture lookup with explicit LOD.")));
-		idents.insert(std::make_pair("textureProjLodOffset", Identifier("Do an offset projective texture lookup with explicit LOD.")));
-		idents.insert(std::make_pair("textureGrad", Identifier("Do a texture lookup as in texture but with explicit gradients.")));
-		idents.insert(std::make_pair("textureGradOffset", Identifier("Do a texture lookup with both explicit gradient and offset, as described in textureGrad and textureOffset.")));
-		idents.insert(std::make_pair("textureProjGrad", Identifier("Do a texture lookup both projectively and with explicit gradient.")));
-		idents.insert(std::make_pair("textureProjGradOffset", Identifier("Do a texture lookup both projectively and with explicit gradient as well as with offset.")));
-		idents.insert(std::make_pair("textureGather", Identifier("Built-in function.")));
-		idents.insert(std::make_pair("textureGatherOffset", Identifier("Built-in function.")));
-		idents.insert(std::make_pair("textureGatherOffsets", Identifier("Built-in function.")));
-		idents.insert(std::make_pair("texture1D", Identifier("1D texture lookup.")));
-		idents.insert(std::make_pair("texture1DLod", Identifier("1D texture lookup with LOD.")));
-		idents.insert(std::make_pair("texture1DProj", Identifier("1D texture lookup with projective divide.")));
-		idents.insert(std::make_pair("texture1DProjLod", Identifier("1D texture lookup with projective divide and with LOD.")));
-		idents.insert(std::make_pair("texture2D", Identifier("2D texture lookup.")));
-		idents.insert(std::make_pair("texture2DLod", Identifier("2D texture lookup with LOD.")));
-		idents.insert(std::make_pair("texture2DProj", Identifier("2D texture lookup with projective divide.")));
-		idents.insert(std::make_pair("texture2DProjLod", Identifier("2D texture lookup with projective divide and with LOD.")));
-		idents.insert(std::make_pair("texture3D", Identifier("3D texture lookup.")));
-		idents.insert(std::make_pair("texture3DLod", Identifier("3D texture lookup with LOD.")));
-		idents.insert(std::make_pair("texture3DProj", Identifier("3D texture lookup with projective divide.")));
-		idents.insert(std::make_pair("texture3DProjLod", Identifier("3D texture lookup with projective divide and with LOD.")));
-		idents.insert(std::make_pair("textureCube", Identifier("Cube texture lookup.")));
-		idents.insert(std::make_pair("textureCubeLod", Identifier("Cube texture lookup with LOD.")));
-		idents.insert(std::make_pair("shadow1D", Identifier("1D texture lookup.")));
-		idents.insert(std::make_pair("shadow1DLod", Identifier("1D texture lookup with LOD.")));
-		idents.insert(std::make_pair("shadow1DProj", Identifier("1D texture lookup with projective divide.")));
-		idents.insert(std::make_pair("shadow1DProjLod", Identifier("1D texture lookup with projective divide and with LOD.")));
-		idents.insert(std::make_pair("shadow2D", Identifier("2D texture lookup.")));
-		idents.insert(std::make_pair("shadow2DLod", Identifier("2D texture lookup with LOD.")));
-		idents.insert(std::make_pair("shadow2DProj", Identifier("2D texture lookup with projective divide.")));
-		idents.insert(std::make_pair("shadow2DProjLod", Identifier("2D texture lookup with projective divide and with LOD.")));
-		idents.insert(std::make_pair("dFdx", Identifier("Returns the partial derivative of x with respect to the screen-space x-coordinate.")));
-		idents.insert(std::make_pair("dFdy", Identifier("Returns the partial derivative of x with respect to the screen-space y-coordinate.")));
-		idents.insert(std::make_pair("fwidth", Identifier("Returns abs(ddx(x)) + abs(ddy(x))")));
-		idents.insert(std::make_pair("interpolateAtCentroid", Identifier("Return the value of the input varying interpolant sampled at a location inside the both the pixel and the primitive being processed.")));
-		idents.insert(std::make_pair("interpolateAtSample", Identifier("Return the value of the input varying interpolant at the location of sample number sample.")));
-		idents.insert(std::make_pair("interpolateAtOffset", Identifier("Return the value of the input varying interpolant sampled at an offset from the center of the pixel specified by offset.")));
-		idents.insert(std::make_pair("noise1", Identifier("Generates a random value")));
-		idents.insert(std::make_pair("noise2", Identifier("Generates a random value")));
-		idents.insert(std::make_pair("noise3", Identifier("Generates a random value")));
-		idents.insert(std::make_pair("noise4", Identifier("Generates a random value")));
-		idents.insert(std::make_pair("EmitStreamVertex", Identifier("Emit the current values of output variables to the current output primitive on stream stream.")));
-		idents.insert(std::make_pair("EndStreamPrimitive", Identifier("Completes the current output primitive on stream stream and starts a new one.")));
-		idents.insert(std::make_pair("EmitVertex", Identifier("Emit the current values to the current output primitive.")));
-		idents.insert(std::make_pair("EndPrimitive", Identifier("Completes the current output primitive and starts a new one.")));
-		idents.insert(std::make_pair("barrier", Identifier("Synchronize execution of multiple shader invocations")));
-		idents.insert(std::make_pair("groupMemoryBarrier", Identifier("Controls the ordering of memory transaction issued shader invocation relative to a work group")));
-		idents.insert(std::make_pair("memoryBarrier", Identifier("Controls the ordering of memory transactions issued by a single shader invocation")));
-		idents.insert(std::make_pair("memoryBarrierAtomicCounter", Identifier("Controls the ordering of operations on atomic counters issued by a single shader invocation")));
-		idents.insert(std::make_pair("memoryBarrierBuffer", Identifier("Controls the ordering of operations on buffer variables issued by a single shader invocation")));
-		idents.insert(std::make_pair("memoryBarrierImage", Identifier("Controls the ordering of operations on image variables issued by a single shader invocation")));
-		idents.insert(std::make_pair("memoryBarrierShared", Identifier("Controls the ordering of operations on shared variables issued by a single shader invocation")));
-
-		idents.insert(std::make_pair("atomicAdd", Identifier("Perform an atomic addition to a variable")));
-		idents.insert(std::make_pair("atomicAnd", Identifier("Perform an atomic logical AND operation to a variable")));
-		idents.insert(std::make_pair("atomicCompSwap", Identifier("Perform an atomic compare-exchange operation to a variable")));
-		idents.insert(std::make_pair("atomicCounter", Identifier("Return the current value of an atomic counter")));
-		idents.insert(std::make_pair("atomicCounterDecrement", Identifier("Atomically decrement a counter and return its new value")));
-		idents.insert(std::make_pair("atomicCounterIncrement", Identifier("Atomically increment a counter and return the prior value")));
-		idents.insert(std::make_pair("atomicExchange", Identifier("Perform an atomic exchange operation to a variable")));
-		idents.insert(std::make_pair("atomicMax", Identifier("Perform an atomic max operation to a variable")));
-		idents.insert(std::make_pair("atomicMin", Identifier("Perform an atomic min operation to a variable")));
-		idents.insert(std::make_pair("atomicOr", Identifier("Perform an atomic logical OR operation to a variable")));
-		idents.insert(std::make_pair("atomicXor", Identifier("Perform an atomic logical exclusive OR operation to a variable")));
-	}
-
-	const TextEditor::LanguageDefinition &TextEditor::LanguageDefinition::SPIRV()
-	{
-		static bool inited = false;
-		static LanguageDefinition langDef;
-		if (!inited)
-		{
-			/*
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[ \\t]*#[ \\t]*[a-zA-Z_]+", PaletteIndex::Preprocessor));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("\\'\\\\?[^\\']\\'", PaletteIndex::CharLiteral));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[a-zA-Z_][a-zA-Z0-9_]*", PaletteIndex::Identifier));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[\\[\\]\\{\\}\\!\\%\\^\\&\\*\\(\\)\\-\\+\\=\\~\\|\\<\\>\\?\\/\\;\\,\\.]", PaletteIndex::Punctuation));
-			*/
-
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("L?\\\"(\\\\.|[^\\\"])*\\\"", PaletteIndex::String));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[ =\\t]Op[a-zA-Z]*", PaletteIndex::Keyword));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("%[_a-zA-Z0-9]*", PaletteIndex::Identifier));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+)([eE][+-]?[0-9]+)?[fF]?", PaletteIndex::Number));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[+-]?[0-9]+[Uu]?[lL]?[lL]?", PaletteIndex::Number));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("0[0-7]+[Uu]?[lL]?[lL]?", PaletteIndex::Number));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("0[xX][0-9a-fA-F]+[uU]?[lL]?[lL]?", PaletteIndex::Number));
-
-			langDef.mCommentStart = "/*";
-			langDef.mCommentEnd = "*/";
-			langDef.mSingleLineComment = ";";
-
-			langDef.mCaseSensitive = true;
-			langDef.mAutoIndentation = false;
-
-			langDef.mName = "SPIR-V";
-
-			inited = true;
-		}
-		return langDef;
-	}
-
 	inline static void RISCVDocumentation(TextEditor::Identifiers &identifiers)
 	{
 		identifiers[".data"] = TextEditor::Identifier("The start of the data section. There can only be one data section per program.");
@@ -5202,168 +4809,6 @@ namespace IDE
 			langDef.mAutoIndentation = true;
 
 			langDef.mName = "C";
-
-			inited = true;
-		}
-		return langDef;
-	}
-
-	const TextEditor::LanguageDefinition &TextEditor::LanguageDefinition::SQL()
-	{
-		static bool inited = false;
-		static LanguageDefinition langDef;
-		if (!inited)
-		{
-			static const char *const keywords[] = {
-				"ADD", "EXCEPT", "PERCENT", "ALL", "EXEC", "PLAN", "ALTER", "EXECUTE", "PRECISION", "AND", "EXISTS", "PRIMARY", "ANY", "EXIT", "PRINT", "AS", "FETCH", "PROC", "ASC", "FILE", "PROCEDURE",
-				"AUTHORIZATION", "FILLFACTOR", "PUBLIC", "BACKUP", "FOR", "RAISERROR", "BEGIN", "FOREIGN", "READ", "BETWEEN", "FREETEXT", "READTEXT", "BREAK", "FREETEXTTABLE", "RECONFIGURE",
-				"BROWSE", "FROM", "REFERENCES", "BULK", "FULL", "REPLICATION", "BY", "FUNCTION", "RESTORE", "CASCADE", "GOTO", "RESTRICT", "CASE", "GRANT", "RETURN", "CHECK", "GROUP", "REVOKE",
-				"CHECKPOINT", "HAVING", "RIGHT", "CLOSE", "HOLDLOCK", "ROLLBACK", "CLUSTERED", "IDENTITY", "ROWCOUNT", "COALESCE", "IDENTITY_INSERT", "ROWGUIDCOL", "COLLATE", "IDENTITYCOL", "RULE",
-				"COLUMN", "IF", "SAVE", "COMMIT", "IN", "SCHEMA", "COMPUTE", "INDEX", "SELECT", "CONSTRAINT", "INNER", "SESSION_USER", "CONTAINS", "INSERT", "SET", "CONTAINSTABLE", "INTERSECT", "SETUSER",
-				"CONTINUE", "INTO", "SHUTDOWN", "CONVERT", "IS", "SOME", "CREATE", "JOIN", "STATISTICS", "CROSS", "KEY", "SYSTEM_USER", "CURRENT", "KILL", "TABLE", "CURRENT_DATE", "LEFT", "TEXTSIZE",
-				"CURRENT_TIME", "LIKE", "THEN", "CURRENT_TIMESTAMP", "LINENO", "TO", "CURRENT_USER", "LOAD", "TOP", "CURSOR", "NATIONAL", "TRAN", "DATABASE", "NOCHECK", "TRANSACTION",
-				"DBCC", "NONCLUSTERED", "TRIGGER", "DEALLOCATE", "NOT", "TRUNCATE", "DECLARE", "NULL", "TSEQUAL", "DEFAULT", "NULLIF", "UNION", "DELETE", "OF", "UNIQUE", "DENY", "OFF", "UPDATE",
-				"DESC", "OFFSETS", "UPDATETEXT", "DISK", "ON", "USE", "DISTINCT", "OPEN", "USER", "DISTRIBUTED", "OPENDATASOURCE", "VALUES", "DOUBLE", "OPENQUERY", "VARYING", "DROP", "OPENROWSET", "VIEW",
-				"DUMMY", "OPENXML", "WAITFOR", "DUMP", "OPTION", "WHEN", "ELSE", "OR", "WHERE", "END", "ORDER", "WHILE", "ERRLVL", "OUTER", "WITH", "ESCAPE", "OVER", "WRITETEXT"};
-
-			for (auto &k : keywords)
-				langDef.mKeywords.insert(k);
-
-			static const char *const identifiers[] = {
-				"ABS", "ACOS", "ADD_MONTHS", "ASCII", "ASCIISTR", "ASIN", "ATAN", "ATAN2", "AVG", "BFILENAME", "BIN_TO_NUM", "BITAND", "CARDINALITY", "CASE", "CAST", "CEIL",
-				"CHARTOROWID", "CHR", "COALESCE", "COMPOSE", "CONCAT", "CONVERT", "CORR", "COS", "COSH", "COUNT", "COVAR_POP", "COVAR_SAMP", "CUME_DIST", "CURRENT_DATE",
-				"CURRENT_TIMESTAMP", "DBTIMEZONE", "DECODE", "DECOMPOSE", "DENSE_RANK", "DUMP", "EMPTY_BLOB", "EMPTY_CLOB", "EXP", "EXTRACT", "FIRST_VALUE", "FLOOR", "FROM_TZ", "GREATEST",
-				"GROUP_ID", "HEXTORAW", "INITCAP", "INSTR", "INSTR2", "INSTR4", "INSTRB", "INSTRC", "LAG", "LAST_DAY", "LAST_VALUE", "LEAD", "LEAST", "LENGTH", "LENGTH2", "LENGTH4",
-				"LENGTHB", "LENGTHC", "LISTAGG", "LN", "LNNVL", "LOCALTIMESTAMP", "LOG", "LOWER", "LPAD", "LTRIM", "MAX", "MEDIAN", "MIN", "MOD", "MONTHS_BETWEEN", "NANVL", "NCHR",
-				"NEW_TIME", "NEXT_DAY", "NTH_VALUE", "NULLIF", "NUMTODSINTERVAL", "NUMTOYMINTERVAL", "NVL", "NVL2", "POWER", "RANK", "RAWTOHEX", "REGEXP_COUNT", "REGEXP_INSTR",
-				"REGEXP_REPLACE", "REGEXP_SUBSTR", "REMAINDER", "REPLACE", "ROUND", "ROWNUM", "RPAD", "RTRIM", "SESSIONTIMEZONE", "SIGN", "SIN", "SINH",
-				"SOUNDEX", "SQRT", "STDDEV", "SUBSTR", "SUM", "SYS_CONTEXT", "SYSDATE", "SYSTIMESTAMP", "TAN", "TANH", "TO_CHAR", "TO_CLOB", "TO_DATE", "TO_DSINTERVAL", "TO_LOB",
-				"TO_MULTI_BYTE", "TO_NCLOB", "TO_NUMBER", "TO_SINGLE_BYTE", "TO_TIMESTAMP", "TO_TIMESTAMP_TZ", "TO_YMINTERVAL", "TRANSLATE", "TRIM", "TRUNC", "TZ_OFFSET", "UID", "UPPER",
-				"USER", "USERENV", "VAR_POP", "VAR_SAMP", "VARIANCE", "VSIZE "};
-			for (auto &k : identifiers)
-			{
-				Identifier id;
-				id.mDeclaration = "Built-in function";
-				langDef.mIdentifiers.insert(std::make_pair(std::string(k), id));
-			}
-
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("L?\\\"(\\\\.|[^\\\"])*\\\"", PaletteIndex::String));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("\\\'[^\\\']*\\\'", PaletteIndex::String));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+)([eE][+-]?[0-9]+)?[fF]?", PaletteIndex::Number));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[+-]?[0-9]+[Uu]?[lL]?[lL]?", PaletteIndex::Number));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("0[0-7]+[Uu]?[lL]?[lL]?", PaletteIndex::Number));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("0[xX][0-9a-fA-F]+[uU]?[lL]?[lL]?", PaletteIndex::Number));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[a-zA-Z_][a-zA-Z0-9_]*", PaletteIndex::Identifier));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[\\[\\]\\{\\}\\!\\%\\^\\&\\*\\(\\)\\-\\+\\=\\~\\|\\<\\>\\?\\/\\;\\,\\.]", PaletteIndex::Punctuation));
-
-			langDef.mCommentStart = "/*";
-			langDef.mCommentEnd = "*/";
-			langDef.mSingleLineComment = "//";
-
-			langDef.mCaseSensitive = false;
-			langDef.mAutoIndentation = false;
-
-			langDef.mName = "SQL";
-
-			inited = true;
-		}
-		return langDef;
-	}
-
-	const TextEditor::LanguageDefinition &TextEditor::LanguageDefinition::AngelScript()
-	{
-		static bool inited = false;
-		static LanguageDefinition langDef;
-		if (!inited)
-		{
-			static const char *const keywords[] = {
-				"and", "abstract", "auto", "bool", "break", "case", "cast", "class", "const", "continue", "default", "do", "double", "else", "enum", "false", "final", "float", "for",
-				"from", "funcdef", "function", "get", "if", "import", "in", "inout", "int", "interface", "int8", "int16", "int32", "int64", "is", "mixin", "namespace", "not",
-				"null", "or", "out", "override", "private", "protected", "return", "set", "shared", "super", "switch", "this ", "true", "typedef", "uint", "uint8", "uint16", "uint32",
-				"uint64", "void", "while", "xor"};
-
-			for (auto &k : keywords)
-				langDef.mKeywords.insert(k);
-
-			static const char *const identifiers[] = {
-				"cos", "sin", "tab", "acos", "asin", "atan", "atan2", "cosh", "sinh", "tanh", "log", "log10", "pow", "sqrt", "abs", "ceil", "floor", "fraction", "closeTo", "fpFromIEEE", "fpToIEEE",
-				"complex", "opEquals", "opAddAssign", "opSubAssign", "opMulAssign", "opDivAssign", "opAdd", "opSub", "opMul", "opDiv"};
-			for (auto &k : identifiers)
-			{
-				Identifier id;
-				id.mDeclaration = "Built-in function";
-				langDef.mIdentifiers.insert(std::make_pair(std::string(k), id));
-			}
-
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("L?\\\"(\\\\.|[^\\\"])*\\\"", PaletteIndex::String));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("\\'\\\\?[^\\']\\'", PaletteIndex::String));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+)([eE][+-]?[0-9]+)?[fF]?", PaletteIndex::Number));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[+-]?[0-9]+[Uu]?[lL]?[lL]?", PaletteIndex::Number));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("0[0-7]+[Uu]?[lL]?[lL]?", PaletteIndex::Number));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("0[xX][0-9a-fA-F]+[uU]?[lL]?[lL]?", PaletteIndex::Number));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[a-zA-Z_][a-zA-Z0-9_]*", PaletteIndex::Identifier));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[\\[\\]\\{\\}\\!\\%\\^\\&\\*\\(\\)\\-\\+\\=\\~\\|\\<\\>\\?\\/\\;\\,\\.]", PaletteIndex::Punctuation));
-
-			langDef.mCommentStart = "/*";
-			langDef.mCommentEnd = "*/";
-			langDef.mSingleLineComment = "//";
-
-			langDef.mCaseSensitive = true;
-			langDef.mAutoIndentation = true;
-
-			langDef.mName = "AngelScript";
-
-			inited = true;
-		}
-		return langDef;
-	}
-
-	const TextEditor::LanguageDefinition &TextEditor::LanguageDefinition::Lua()
-	{
-		static bool inited = false;
-		static LanguageDefinition langDef;
-		if (!inited)
-		{
-			static const char *const keywords[] = {
-				"and", "break", "do", "", "else", "elseif", "end", "false", "for", "function", "if", "in", "", "local", "nil", "not", "or", "repeat", "return", "then", "true", "until", "while"};
-
-			for (auto &k : keywords)
-				langDef.mKeywords.insert(k);
-
-			static const char *const identifiers[] = {
-				"assert", "collectgarbage", "dofile", "error", "getmetatable", "ipairs", "loadfile", "load", "loadstring", "next", "pairs", "pcall", "print", "rawequal", "rawlen", "rawget", "rawset",
-				"select", "setmetatable", "tonumber", "tostring", "type", "xpcall", "_G", "_VERSION", "arshift", "band", "bnot", "bor", "bxor", "btest", "extract", "lrotate", "lshift", "replace",
-				"rrotate", "rshift", "create", "resume", "running", "status", "wrap", "yield", "isyieldable", "debug", "getuservalue", "gethook", "getinfo", "getlocal", "getregistry", "getmetatable",
-				"getupvalue", "upvaluejoin", "upvalueid", "setuservalue", "sethook", "setlocal", "setmetatable", "setupvalue", "traceback", "close", "flush", "input", "lines", "open", "output", "popen",
-				"read", "tmpfile", "type", "write", "close", "flush", "lines", "read", "seek", "setvbuf", "write", "__gc", "__tostring", "abs", "acos", "asin", "atan", "ceil", "cos", "deg", "exp", "tointeger",
-				"floor", "fmod", "ult", "log", "max", "min", "modf", "rad", "random", "randomseed", "sin", "sqrt", "string", "tan", "type", "atan2", "cosh", "sinh", "tanh",
-				"pow", "frexp", "ldexp", "log10", "pi", "huge", "maxinteger", "mininteger", "loadlib", "searchpath", "seeall", "preload", "cpath", "path", "searchers", "loaded", "module", "require", "clock",
-				"date", "difftime", "execute", "exit", "getenv", "remove", "rename", "setlocale", "time", "tmpname", "byte", "char", "dump", "find", "format", "gmatch", "gsub", "len", "lower", "match", "rep",
-				"reverse", "sub", "upper", "pack", "packsize", "unpack", "concat", "maxn", "insert", "pack", "unpack", "remove", "move", "sort", "offset", "codepoint", "char", "len", "codes", "charpattern",
-				"coroutine", "table", "io", "os", "string", "utf8", "bit32", "math", "debug", "package"};
-			for (auto &k : identifiers)
-			{
-				Identifier id;
-				id.mDeclaration = "Built-in function";
-				langDef.mIdentifiers.insert(std::make_pair(std::string(k), id));
-			}
-
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("L?\\\"(\\\\.|[^\\\"])*\\\"", PaletteIndex::String));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("\\\'[^\\\']*\\\'", PaletteIndex::String));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("0[xX][0-9a-fA-F]+[uU]?[lL]?[lL]?", PaletteIndex::Number));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+)([eE][+-]?[0-9]+)?[fF]?", PaletteIndex::Number));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[+-]?[0-9]+[Uu]?[lL]?[lL]?", PaletteIndex::Number));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[a-zA-Z_][a-zA-Z0-9_]*", PaletteIndex::Identifier));
-			langDef.mTokenRegexStrings.push_back(std::make_pair<std::string, PaletteIndex>("[\\[\\]\\{\\}\\!\\%\\^\\&\\*\\(\\)\\-\\+\\=\\~\\|\\<\\>\\?\\/\\;\\,\\.]", PaletteIndex::Punctuation));
-
-			langDef.mCommentStart = "--[[";
-			langDef.mCommentEnd = "]]";
-			langDef.mSingleLineComment = "--";
-
-			langDef.mCaseSensitive = true;
-			langDef.mAutoIndentation = false;
-
-			langDef.mName = "Lua";
 
 			inited = true;
 		}
