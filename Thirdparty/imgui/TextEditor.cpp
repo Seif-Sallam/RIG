@@ -155,6 +155,7 @@ const std::vector<TextEditor::Shortcut> TextEditor::GetDefaultShortcuts()
 	ret[(int)TextEditor::ShortcutID::SelectAll] = TextEditor::Shortcut(ImGuiKey_A, -1, 0, 1, 0); // CTRL+A
 	ret[(int)TextEditor::ShortcutID::AutocompleteOpen] = TextEditor::Shortcut(ImGuiKey_Space, -1, 0, 1, 0); // CTRL+SPACE
 	ret[(int)TextEditor::ShortcutID::AutocompleteSelect] = TextEditor::Shortcut(ImGuiKey_Tab, -1, 0, 0, 0); // TAB
+	ret[(int)TextEditor::ShortcutID::AutocompleteSelect] = TextEditor::Shortcut(ImGuiKey_Enter, -1, 0, 0, 0); // TAB
 	ret[(int)TextEditor::ShortcutID::AutocompleteSelectActive] = TextEditor::Shortcut(ImGuiKey_Enter, -1, 0, 0, 0); // RETURN
 	ret[(int)TextEditor::ShortcutID::AutocompleteUp] = TextEditor::Shortcut(ImGuiKey_UpArrow, -1, 0, 0, 0); // UP ARROW
 	ret[(int)TextEditor::ShortcutID::AutocompleteDown] = TextEditor::Shortcut(ImGuiKey_DownArrow, -1, 0, 0, 0); // DOWN ARROW
@@ -1601,7 +1602,7 @@ void TextEditor::RenderInternal(const char* aTitle)
 					drawList->AddCircle(ImVec2(startX, startY), radius + 1, mPalette[(int)PaletteIndex::BreakpointOutline]);
 					drawList->AddCircleFilled(ImVec2(startX, startY), radius, mPalette[(int)PaletteIndex::Breakpoint]);
 
-					Breakpoint bkpt = GetBreakpoint(lineNo + 1);
+					Breakpoint& bkpt = GetBreakpoint(lineNo + 1);
 					if (!bkpt.mEnabled)
 						drawList->AddCircleFilled(ImVec2(startX, startY), radius - 1, mPalette[(int)PaletteIndex::BreakpointDisabled]);
 					else {
@@ -1770,7 +1771,7 @@ void TextEditor::RenderInternal(const char* aTitle)
 
 		// ImFont* font = ImGui::GetFont();
 		// ImGui::PopFont();
-
+		ImGui::SetNextWindowBgAlpha(0.5f);
 		ImGui::SetNextWindowPos(acPos, ImGuiCond_Always);
 		ImGui::BeginChild("##texteditor_autocompl", ImVec2(mUICalculateSize(150), mUICalculateSize(100)), true);
 
@@ -2056,7 +2057,6 @@ void TextEditor::m_buildSuggestions(bool* keepACOpened)
 			size_t loc = lwrStr.find(acWord);
 			if (loc != std::string::npos) {
 				std::string val = func.first;
-				if (mCompleteBraces) val += "()";
 				weights.push_back(ACEntry(func.first, val, (int)loc));
 			}
 		}
@@ -2099,7 +2099,6 @@ void TextEditor::m_buildSuggestions(bool* keepACOpened)
 			size_t loc = lwrStr.find(acWord);
 			if (loc != std::string::npos) {
 				std::string val = str.first;
-				if (mCompleteBraces) val += "()";
 				weights.push_back(ACEntry(str.first, val, (int)loc));
 			}
 		}
@@ -2227,7 +2226,7 @@ void TextEditor::Render(const char* aTitle, const ImVec2& aSize, bool aBorder)
 	{
 		// ImFont* font = ImGui::GetFont();
 		// ImGui::PopFont();
-
+		ImGui::SetNextWindowBgAlpha(0.5f);
 		ImGui::SetNextWindowPos(ImVec2(mFindOrigin.x + windowWidth - mUICalculateSize(250), mFindOrigin.y + mUICalculateSize(50) * IsDebugging()), ImGuiCond_Always);
 		ImGui::BeginChild(("##ted_findwnd" + std::string(aTitle)).c_str(), ImVec2(mUICalculateSize(220.0f), mUICalculateSize(mReplaceOpened ? 90.0f : 40.f)), true, ImGuiWindowFlags_NoScrollbar);
 
