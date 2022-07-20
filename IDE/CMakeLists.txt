@@ -30,3 +30,8 @@ target_link_libraries(IDE
 	imgui
 	Utils
 )
+
+target_compile_definitions(IDE
+	PRIVATE
+	RESOURCES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/resources"
+)

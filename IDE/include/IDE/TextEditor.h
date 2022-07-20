@@ -115,7 +115,7 @@ namespace IDE
 		};
 
 		static const int LineNumberSpace = 20;
-		static const int DebugDataSpace = 10;
+		static const int DebugDataSpace = 0;
 
 		struct Shortcut
 		{
@@ -170,8 +170,8 @@ namespace IDE
 			Coordinates(int aLine, int aColumn)
 				: mLine(aLine), mColumn(aColumn)
 			{
-				assert(aLine >= 0);
-				assert(aColumn >= 0);
+				assert(aLine >= -1);
+				assert(aColumn >= -1);
 			}
 			static Coordinates Invalid()
 			{
@@ -581,11 +581,11 @@ namespace IDE
 		float mUIScale, mUIFontSize, mEditorFontSize;
 		inline float mUICalculateSize(float h)
 		{
-			return h * (mUIScale + mUIFontSize / 18.0f - 1.0f);
+			return h * (mUIScale + mUIFontSize / 16.f - 1.0f);
 		}
 		inline float mEditorCalculateSize(float h)
 		{
-			return h * (mUIScale + mEditorFontSize / 18.0f - 1.0f);
+			return h * (mUIScale + mEditorFontSize / 16.f - 1.0f);
 		}
 
 		float mLineSpacing;
@@ -594,6 +594,8 @@ namespace IDE
 		UndoBuffer mUndoBuffer;
 		int mUndoIndex;
 		int mReplaceIndex;
+
+		float mFontSize;
 
 		bool mSidebar;
 		bool mHasSearch;

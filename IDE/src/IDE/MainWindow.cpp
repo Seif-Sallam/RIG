@@ -14,6 +14,8 @@
 
 #include <Utils/Logger.h>
 
+#include <filesystem>
+
 namespace IDE
 {
 
@@ -24,32 +26,72 @@ namespace IDE
 	static void ViewPortResizeCallback(GLFWwindow *window, int width, int height);
 
 	MainWindow::MainWindow(uint32_t argc, const char *argv[])
-		: m_TextEditorWindowName("Text Editors"), m_LogWindowName("Log"), m_RegisterFileWindowName("Register File")
+		: m_TextEditorWindowName("Text Editors")
+		, m_LogWindowName("Log")
+		, m_RegisterFileWindowName("Register File")
+		, m_ConfigOpened(false)
+		, m_LayoutInitialized(false)
+		, m_ActiveFontSize(24)
+		, m_ActiveFont("Consolos")
 	{
-
 		InitilizeWindow();
+		ImFontConfig cnfg;
+		cnfg.MergeMode =true;
+		static const ImWchar icons_ranges[] = { 0xf000, 0xf3ff, 0 }; // Will not be copied by AddFont* so keep in scope.
+		// AddFont(RESOURCES_DIR "/Fonts/Consolos.ttf", 24);
+		// ImGui::GetIO().Fonts[0].AddFontFromFileTTF(RESOURCES_DIR"/fonts/fa-solid-900.ttf", 20, &cnfg, icons_ranges);
+
 		m_TextEditor.SetFunctionTooltips(true);
-		// m_TextEditor.SetSidebarVisible(false);
+		m_TextEditor.SetShowWhitespaces(true);
 		auto lang = TextEditor::LanguageDefinition::RISCV();
 		m_TextEditor.SetColorizerEnable(true);
 		m_TextEditor.SetLanguageDefinition(lang);
-		std::string str = "ADD\n";
-		std::ifstream inputFile("/home/seif-sallam/Desktop/Assembler.txt");
-		if (inputFile.fail())
+
+
+		this->AddDefaultFonts();
+
+
+
+		m_TextEditor.SetText(".data\n\n.text\n");
+	}
+
+	void MainWindow::RemoveTTForOTF(std::string& str) const
+	{
+		size_t index = str.find(".ttf");
+		if (index == std::string::npos)
 		{
-			std::cerr << "File was not opened\n";
+			index = str.find(".otf");
+			if(index = std::string::npos)
+				return;
 		}
-		else
+		str.erase(str.begin() + index, str.end());
+	}
+
+	void MainWindow::AddDefaultFonts()
+	{
+		m_Fonts.clear();
+		namespace fs = std::filesystem;
+		fs::path path(RESOURCES_DIR"/fonts/");
 		{
-			while (!inputFile.eof())
-			{
-				std::string line;
-				std::getline(inputFile, line);
-				str += line + '\n';
-			}
-			inputFile.close();
+			auto& consolosFont = m_Fonts[m_ActiveFont];
+			consolosFont[m_ActiveFontSize] = AddFont(RESOURCES_DIR"/fonts/Consolos.ttf", 24);
+			Util::Logger::Warning("{}", m_ActiveFontSize);
 		}
-		m_TextEditor.SetText(str);
+		for (auto entry : fs::directory_iterator(path))
+		{
+			std::string fileName = entry.path().filename().string();
+			RemoveTTForOTF(fileName);
+			Util::Logger::Info("Adding font: {}", fileName);
+			for(uint32_t fontSize = 18; fontSize <= 48; fontSize+=2)
+				m_Fonts[fileName][fontSize] = AddFont(entry.path().string().c_str(), fontSize);
+		}
+	}
+
+	ImFont* MainWindow::AddFont(const char* path, uint32_t pixelSize)
+	{
+		auto font = ImGui::GetIO().Fonts->AddFontFromFileTTF(path, (float)pixelSize);
+		Util::Logger::Info("Loaded font: {}", path);
+		return font;
 	}
 
 	void MainWindow::SetupLayout(ImGuiID dockSpaceID)
@@ -117,11 +159,14 @@ namespace IDE
 					auto textToSave = m_TextEditor.GetText();
 					/// save text....
 				}
+				if (ImGui::MenuItem("Config"))
+					m_ConfigOpened = true;
 				if (ImGui::MenuItem("Quit", "Alt+F4"))
 				{
 					// We should close :D
 					glfwSetWindowShouldClose(m_Window, 1);
 				}
+
 				ImGui::EndMenu();
 			}
 			if (ImGui::BeginMenu("Edit"))
@@ -240,14 +285,18 @@ namespace IDE
 		{
 			HandleEvents();
 
-			Update();
 			ImGui_ImplOpenGL3_NewFrame();
 			ImGui_ImplGlfw_NewFrame();
 			ImGui::NewFrame();
+
+			ImGui::PushFont(m_Fonts[m_ActiveFont][m_ActiveFontSize]);
+
 			SetupDockspace();
 			ImGuiLayer();
 
+			ImGui::PopFont();
 			Render();
+			Update();
 		}
 	}
 
@@ -258,9 +307,57 @@ namespace IDE
 
 	void MainWindow::ImGuiLayer()
 	{
+		ConfigWindow();
 		RegisterFileWindow();
 		LogWindow();
 		TextEditorWindow();
+	}
+
+	void MainWindow::ConfigWindow()
+	{
+		static std::string selectedFont = m_ActiveFont;
+		if (m_ConfigOpened)
+		{
+			ImGuiWindowFlags configsWindowFlags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking
+												  | ImGuiWindowFlags_AlwaysAutoResize;
+			ImGui::Begin("Config", &m_ConfigOpened, configsWindowFlags);
+			{
+				static int32_t pixelSize = m_ActiveFontSize;
+				// Begin a combo box that contains the options for the fonts
+				uint32_t currentFontSize = m_ActiveFontSize;
+				ImGui::Text("Active Font: %s, Size: %u", m_ActiveFont.c_str(), currentFontSize);
+				if (ImGui::BeginCombo("###1", selectedFont.c_str()))
+				{
+					for (auto& entry : m_Fonts)
+					{
+						if (ImGui::RadioButton(entry.first.c_str(), selectedFont == entry.first))
+						{
+							selectedFont = entry.first;
+						}
+					}
+					// End the combo box provided we opened it
+					ImGui::EndCombo();
+				}
+				ImGui::TextUnformatted("Pixel Size: ");
+				ImGui::SameLine();
+				ImGui::SliderInt("###pixel_size_choser", &pixelSize, 18, 48);
+				bool activeButton = selectedFont != m_ActiveFont || pixelSize != currentFontSize;
+				if (ImGuiAl::Button("Change Font", activeButton))
+				{
+					pixelSize = (pixelSize % 2) ? pixelSize + 1 : pixelSize;
+					m_ActiveFont = selectedFont;
+					m_ActiveFontSize = pixelSize;
+					selectedFont = m_ActiveFont;
+					pixelSize = m_ActiveFontSize;
+				}
+			}
+			ImGui::End();
+		}
+		else
+		{
+			selectedFont = m_ActiveFont;
+		}
+
 	}
 
 	void MainWindow::LogWindow()
@@ -378,14 +475,16 @@ namespace IDE
 						m_TextEditor.IsOverwrite() ? "Ovr" : "Ins",
 						m_TextEditor.CanUndo() ? "*" : " ",
 						m_TextEditor.GetLanguageDefinition().mName.c_str(), "~/Desktop/Assembler.txt");
-
+			// ImGui::PushFont(m_Fonts[m_ActiveFontIndex]);
 			m_TextEditor.Render("TextEditor");
+			// ImGui::PopFont();
 		}
 		ImGui::End();
 	}
 
 	void MainWindow::Update()
 	{
+
 	}
 
 	void MainWindow::Render()

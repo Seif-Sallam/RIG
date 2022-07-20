@@ -514,11 +514,12 @@ namespace IDE
 	{
 		ImVec2 origin = mUICursorPos;
 		ImVec2 local(aPosition.x - origin.x, aPosition.y - origin.y);
-
 		int lineNo = std::max(0, (int)floor(local.y / mCharAdvance.y));
-
+		if(floor(local.y / mCharAdvance.y) < 0 || local.x < mTextStart)
+		{
+			return Coordinates::Invalid();
+		}
 		int columnCoord = 0;
-
 		if (lineNo >= 0 && lineNo < (int)mLines.size())
 		{
 			auto &line = mLines.at(lineNo);
@@ -1325,9 +1326,13 @@ namespace IDE
 				{
 					if (!ctrl)
 					{
-						mState.mCursorPosition = mInteractiveStart = mInteractiveEnd = ScreenPosToCoordinates(ImGui::GetMousePos());
-						mSelectionMode = SelectionMode::Line;
-						SetSelection(mInteractiveStart, mInteractiveEnd, mSelectionMode);
+						auto coord = ScreenPosToCoordinates(ImGui::GetMousePos());
+						if(coord != Coordinates::Invalid())
+						{
+							mState.mCursorPosition = mInteractiveStart = mInteractiveEnd = coord;
+							mSelectionMode = SelectionMode::Line;
+							SetSelection(mInteractiveStart, mInteractiveEnd, mSelectionMode);
+						}
 					}
 
 					mLastClick = -1.0f;
@@ -1341,12 +1346,16 @@ namespace IDE
 				{
 					if (!ctrl)
 					{
-						mState.mCursorPosition = mInteractiveStart = mInteractiveEnd = ScreenPosToCoordinates(ImGui::GetMousePos());
-						if (mSelectionMode == SelectionMode::Line)
-							mSelectionMode = SelectionMode::Normal;
-						else
-							mSelectionMode = SelectionMode::Word;
-						SetSelection(mInteractiveStart, mInteractiveEnd, mSelectionMode);
+						auto coord = ScreenPosToCoordinates(ImGui::GetMousePos());
+						if(coord != Coordinates::Invalid())
+						{
+							mState.mCursorPosition = mInteractiveStart = mInteractiveEnd = coord;
+							if (mSelectionMode == SelectionMode::Line)
+								mSelectionMode = SelectionMode::Normal;
+							else
+								mSelectionMode = SelectionMode::Word;
+							SetSelection(mInteractiveStart, mInteractiveEnd, mSelectionMode);
+						}
 					}
 
 					mLastClick = (float)ImGui::GetTime();
@@ -1362,45 +1371,55 @@ namespace IDE
 					if (pos.x - mUICursorPos.x < ImGui::GetStyle().WindowPadding.x + mEditorCalculateSize(DebugDataSpace))
 					{
 						Coordinates lineInfo = ScreenPosToCoordinates(ImGui::GetMousePos());
-						lineInfo.mLine += 1;
+						if(lineInfo != Coordinates::Invalid())
+							lineInfo.mLine += 1;
 
-						if (HasBreakpoint(lineInfo.mLine))
-							RemoveBreakpoint(lineInfo.mLine);
-						else
-							AddBreakpoint(lineInfo.mLine);
+
+						// if (HasBreakpoint(lineInfo.mLine))
+						// 	RemoveBreakpoint(lineInfo.mLine);
+						// else
+						// 	AddBreakpoint(lineInfo.mLine);
 					}
 					else
 					{
 						mACOpened = false;
 
 						auto tcoords = ScreenPosToCoordinates(ImGui::GetMousePos());
+						if(tcoords != Coordinates::Invalid())
+						{
+							if (!shift)
+								mInteractiveStart = tcoords;
 
-						if (!shift)
-							mInteractiveStart = tcoords;
+							mState.mCursorPosition = mInteractiveEnd = tcoords;
 
-						mState.mCursorPosition = mInteractiveEnd = tcoords;
+							if (ctrl && !shift)
+								mSelectionMode = SelectionMode::Word;
+							else
+								mSelectionMode = SelectionMode::Normal;
+							SetSelection(mInteractiveStart, mInteractiveEnd, mSelectionMode);
 
-						if (ctrl && !shift)
-							mSelectionMode = SelectionMode::Word;
-						else
-							mSelectionMode = SelectionMode::Normal;
-						SetSelection(mInteractiveStart, mInteractiveEnd, mSelectionMode);
-
-						mLastClick = (float)ImGui::GetTime();
+							mLastClick = (float)ImGui::GetTime();
+						}
 					}
 				}
 				// Mouse left button dragging (=> update selection)
 				else if (ImGui::IsMouseDragging(0) && ImGui::IsMouseDown(0))
 				{
 					io.WantCaptureMouse = true;
-					mState.mCursorPosition = mInteractiveEnd = ScreenPosToCoordinates(ImGui::GetMousePos());
-					SetSelection(mInteractiveStart, mInteractiveEnd, mSelectionMode);
+					auto coord = ScreenPosToCoordinates(ImGui::GetMousePos());
+					if(coord != Coordinates::Invalid())
+					{
+						mState.mCursorPosition = mInteractiveEnd = coord;
 
-					float mx = ImGui::GetMousePos().x;
-					if (mx > mFindOrigin.x + mWindowWidth - 50 && mx < mFindOrigin.x + mWindowWidth)
-						ImGui::SetScrollX(ImGui::GetScrollX() + 1.0f);
-					else if (mx > mFindOrigin.x && mx < mFindOrigin.x + mTextStart + 50)
-						ImGui::SetScrollX(ImGui::GetScrollX() - 1.0f);
+
+						SetSelection(mInteractiveStart, mInteractiveEnd, mSelectionMode);
+
+						float mx = ImGui::GetMousePos().x;
+						if (mx > mFindOrigin.x + mWindowWidth - 50 && mx < mFindOrigin.x + mWindowWidth)
+							ImGui::SetScrollX(ImGui::GetScrollX() + 1.0f);
+						else if (mx > mFindOrigin.x && mx < mFindOrigin.x + mTextStart + 50)
+							ImGui::SetScrollX(ImGui::GetScrollX() - 1.0f);
+						}
 				}
 			}
 		}
@@ -1484,6 +1503,7 @@ namespace IDE
 		}
 
 		ImVec2 cursorScreenPos = mUICursorPos = ImGui::GetCursorScreenPos();
+
 		auto scrollX = ImGui::GetScrollX();
 		auto scrollY = ImGui::GetScrollY();
 
@@ -1636,7 +1656,7 @@ namespace IDE
 					{
 						const ImVec2 newOffset(textScreenPos.x + bufferOffset.x, textScreenPos.y + bufferOffset.y);
 						drawList->AddText(newOffset, prevColor, mLineBuffer.c_str());
-						auto textSize = ImGui::GetFont()->CalcTextSizeA(ImGui::GetFontSize(), FLT_MAX, -1.0f, mLineBuffer.c_str(), nullptr, nullptr);
+						auto textSize = ImGui::GetFont()->CalcTextSizeA(ImGui::GetFontSize(), FLT_MAX, -2.0f, mLineBuffer.c_str(), nullptr, nullptr);
 						bufferOffset.x += textSize.x;
 						mLineBuffer.clear();
 					}
@@ -1668,9 +1688,9 @@ namespace IDE
 						if (mShowWhitespaces)
 						{
 							const auto s = ImGui::GetFontSize();
-							const auto x = textScreenPos.x + bufferOffset.x + spaceSize * 0.5f;
-							const auto y = textScreenPos.y + bufferOffset.y + s * 0.5f;
-							drawList->AddCircleFilled(ImVec2(x, y), 1.5f, 0x80808080, 4);
+							const auto x = (textScreenPos.x + bufferOffset.x + spaceSize * 0.5f);
+							const auto y = (textScreenPos.y + bufferOffset.y + s * 0.5f + 1.5f);
+							drawList->AddCircleFilled(ImVec2(x, y), 2.0f, 0x80808080, 4);
 						}
 						bufferOffset.x += spaceSize;
 						i++;
@@ -1856,32 +1876,36 @@ namespace IDE
 				}
 				else if (hoverTime > 0.2)
 				{
-					auto id = GetWordAt(ScreenPosToCoordinates(ImGui::GetMousePos()));
-					if (!id.empty())
+					auto coord = ScreenPosToCoordinates(ImGui::GetMousePos());
+					if(coord != Coordinates::Invalid())
 					{
-						auto it = mLanguageDefinition.mIdentifiers.find(id);
-						if (it != mLanguageDefinition.mIdentifiers.end())
+						auto id = GetWordAt(coord);
+						if (!id.empty())
 						{
-							ImGui::BeginTooltip();
-							ImGui::TextUnformatted(it->second.mDeclaration.c_str());
-							ImGui::EndTooltip();
-						}
-						else
-						{
-							auto pi = mLanguageDefinition.mPreprocIdentifiers.find(id);
-							if (pi != mLanguageDefinition.mPreprocIdentifiers.end())
+							auto it = mLanguageDefinition.mIdentifiers.find(id);
+							if (it != mLanguageDefinition.mIdentifiers.end())
 							{
 								ImGui::BeginTooltip();
-								ImGui::TextUnformatted(pi->second.mDeclaration.c_str());
+								ImGui::TextUnformatted(it->second.mDeclaration.c_str());
 								ImGui::EndTooltip();
 							}
-							else if (IsDebugging() && OnIdentifierHover && HasIdentifierHover)
+							else
 							{
-								if (HasIdentifierHover(this, id))
+								auto pi = mLanguageDefinition.mPreprocIdentifiers.find(id);
+								if (pi != mLanguageDefinition.mPreprocIdentifiers.end())
 								{
 									ImGui::BeginTooltip();
-									OnIdentifierHover(this, id);
+									ImGui::TextUnformatted(pi->second.mDeclaration.c_str());
 									ImGui::EndTooltip();
+								}
+								else if (IsDebugging() && OnIdentifierHover && HasIdentifierHover)
+								{
+									if (HasIdentifierHover(this, id))
+									{
+										ImGui::BeginTooltip();
+										OnIdentifierHover(this, id);
+										ImGui::EndTooltip();
+									}
 								}
 							}
 						}
@@ -2351,7 +2375,11 @@ namespace IDE
 			mRightClickPos = ImGui::GetMousePos();
 
 			if (ImGui::IsWindowHovered())
-				SetCursorPosition(ScreenPosToCoordinates(mRightClickPos));
+			{
+				auto coord = ScreenPosToCoordinates(mRightClickPos);
+				if(coord != Coordinates::Invalid())
+					SetCursorPosition(coord);
+			}
 		}
 
 		bool openBkptConditionWindow = false;
@@ -2374,31 +2402,34 @@ namespace IDE
 			}
 			else
 			{
-				int line = ScreenPosToCoordinates(mRightClickPos).mLine + 1;
-
-				if (IsDebugging() && ImGui::Selectable("Jump") && OnDebuggerJump)
-					OnDebuggerJump(this, line);
-				if (ImGui::Selectable("Breakpoint"))
-					AddBreakpoint(line);
-				if (HasBreakpoint(line))
+				auto coord = ScreenPosToCoordinates(mRightClickPos);
+				if(coord != Coordinates::Invalid())
 				{
-					const auto &bkpt = GetBreakpoint(line);
-					bool isEnabled = bkpt.mEnabled;
-					if (ImGui::Selectable("Condition"))
+					int line = coord.mLine + 1;
+					if (IsDebugging() && ImGui::Selectable("Jump") && OnDebuggerJump)
+						OnDebuggerJump(this, line);
+					if (ImGui::Selectable("Breakpoint"))
+						AddBreakpoint(line);
+					if (HasBreakpoint(line))
 					{
-						mPopupCondition_Line = line;
-						mPopupCondition_Use = !bkpt.mCondition.empty();
-						memcpy(mPopupCondition_Condition, bkpt.mCondition.c_str(), bkpt.mCondition.size());
-						mPopupCondition_Condition[std::min<size_t>(511, bkpt.mCondition.size())] = 0;
-						openBkptConditionWindow = true;
-					}
-					if (ImGui::Selectable(isEnabled ? "Disable" : "Enable"))
-					{
-						SetBreakpointEnabled(line, !isEnabled);
-					}
-					if (ImGui::Selectable("Delete"))
-					{
-						RemoveBreakpoint(line);
+						const auto &bkpt = GetBreakpoint(line);
+						bool isEnabled = bkpt.mEnabled;
+						if (ImGui::Selectable("Condition"))
+						{
+							mPopupCondition_Line = line;
+							mPopupCondition_Use = !bkpt.mCondition.empty();
+							memcpy(mPopupCondition_Condition, bkpt.mCondition.c_str(), bkpt.mCondition.size());
+							mPopupCondition_Condition[std::min<size_t>(511, bkpt.mCondition.size())] = 0;
+							openBkptConditionWindow = true;
+						}
+						if (ImGui::Selectable(isEnabled ? "Disable" : "Enable"))
+						{
+							SetBreakpointEnabled(line, !isEnabled);
+						}
+						if (ImGui::Selectable("Delete"))
+						{
+							RemoveBreakpoint(line);
+						}
 					}
 				}
 			}
@@ -4644,13 +4675,11 @@ namespace IDE
 			for (size_t i = 0; i < size; i++)
 			{
 				std::string lowerString;
+				langDef.mKeywords.insert(keywords[i]);
 				for (auto &c : keywords[i])
 					lowerString += toupper(c);
-
 				keywords.push_back(lowerString);
 			}
-			for (int i = 0; i < size; i++)
-				langDef.mKeywords.insert(keywords[i]);
 
 			std::sort(keywords.begin(), keywords.end(), [](std::string &str1, std::string &str2)
 					  { return str1.size() > str2.size(); });
