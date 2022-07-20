@@ -30,24 +30,26 @@ namespace IDE
 		void Render();
 
 		void InitilizeWindow();
-		void SetupLayout(ImGuiID &dockSpaceID);
+		void SetupLayout(ImGuiID dockSpaceID);
 		void SetupDockspace();
 
 		ImVec2 DockspaceMenuBar();
 
-		void LogImGui();
-		void RegisterFileImGui();
-		void TextEditorImGui();
-
+		// GUI
+		void LogWindow();
+		void RegisterFileWindow();
+		void TextEditorWindow();
+		void SettingsWindow();
+		void ConfigWindow();
 	private:
 		static int32_t m_Width;
 		static int32_t m_Height;
 		GLFWwindow *m_Window;
 		TextEditor m_TextEditor;
-		ImGuiID m_DockID;
-		ImGuiID m_DockIDRight;
-		ImGuiID m_DockIDLeft;
-		ImGuiID m_DockIDBottom;
+		// ImGuiID m_DockID;
+		// ImGuiID m_DockIDRight;
+		// ImGuiID m_DockIDLeft;
+		// ImGuiID m_DockIDBottom;
 		std::string m_TextEditorWindowName;
 		std::string m_RegisterFileWindowName;
 		std::string m_LogWindowName;

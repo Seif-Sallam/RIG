@@ -52,55 +52,60 @@ namespace IDE
 		m_TextEditor.SetText(str);
 	}
 
-	void MainWindow::SetupLayout(ImGuiID &dockSpaceID)
+	void MainWindow::SetupLayout(ImGuiID dockSpaceID)
 	{
 		m_LayoutInitialized = true;
-		m_DockID = dockSpaceID;
+		ImGui::DockBuilderRemoveNode(dockSpaceID);							   // Clear out existing layout
+		ImGui::DockBuilderAddNode(dockSpaceID, ImGuiDockNodeFlags_DockSpace); // Add empty node
+		ImGui::DockBuilderSetNodeSize(dockSpaceID, ImVec2((float)m_Width, (float)m_Height));
 
-		ImGui::DockBuilderRemoveNode(m_DockID);							   // Clear out existing layout
-		ImGui::DockBuilderAddNode(m_DockID, ImGuiDockNodeFlags_DockSpace); // Add empty node
-		ImGui::DockBuilderSetNodeSize(m_DockID, ImVec2((float)m_Width, (float)m_Height));
-		m_DockIDLeft = ImGui::DockBuilderSplitNode(m_DockID, ImGuiDir_Left, 0.20f, NULL, &m_DockID);
-		m_DockIDRight = ImGui::DockBuilderSplitNode(m_DockID, ImGuiDir_Right, 0.30f, NULL, &m_DockID);
-		m_DockIDBottom = ImGui::DockBuilderSplitNode(m_DockID, ImGuiDir_Down, 0.40f, NULL, &m_DockID);
-		ImGui::DockBuilderDockWindow(m_TextEditorWindowName.c_str(), m_DockID);
-		ImGui::DockBuilderDockWindow(m_LogWindowName.c_str(), m_DockIDBottom);
-		ImGui::DockBuilderDockWindow(m_RegisterFileWindowName.c_str(), m_DockIDRight);
-		ImGui::DockBuilderFinish(m_DockID);
+		auto dockSpaceIDLeft = ImGui::DockBuilderSplitNode(dockSpaceID, ImGuiDir_Left, 0.20f, NULL  , &dockSpaceID);
+		auto dockSpaceIDRight = ImGui::DockBuilderSplitNode(dockSpaceID, ImGuiDir_Right, 0.30f, NULL, &dockSpaceID);
+		auto dockSpaceIDBottom = ImGui::DockBuilderSplitNode(dockSpaceID, ImGuiDir_Down, 0.40f, NULL, &dockSpaceID);
+
+		ImGui::DockBuilderDockWindow(m_TextEditorWindowName.c_str(), dockSpaceID);
+		ImGui::DockBuilderDockWindow(m_LogWindowName.c_str(), dockSpaceIDBottom);
+		ImGui::DockBuilderDockWindow(m_RegisterFileWindowName.c_str(), dockSpaceIDRight);
+
+		ImGui::DockBuilderFinish(dockSpaceID);
 	}
 
 	void MainWindow::SetupDockspace()
 	{
 		static const char *dockSpaceTitle = "Dockspace";
 		static auto dockSpaceID = ImGui::GetID(dockSpaceTitle);
-		if (!m_LayoutInitialized)
-			SetupLayout(dockSpaceID);
-
 		{
-			ImGuiWindowFlags dockSpaceWindowFlags = ImGuiWindowFlags_None | ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoMove |
-													ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_AlwaysAutoResize;
+			ImGuiWindowFlags dockSpaceWindowFlags = ImGuiWindowFlags_None 					 | ImGuiWindowFlags_MenuBar
+													| ImGuiWindowFlags_NoDocking  			 | ImGuiWindowFlags_NoTitleBar
+													| ImGuiWindowFlags_NoCollapse 			 | ImGuiWindowFlags_NoScrollbar
+													| ImGuiWindowFlags_NoMove 				 | ImGuiWindowFlags_NoNavFocus
+													| ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_AlwaysAutoResize;
 			ImGui::SetNextWindowSize(ImVec2((float)m_Width, (float)m_Height));
 			ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
 			ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
 			ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-
 			ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f));
 			ImGui::Begin(dockSpaceTitle, (bool *)nullptr, dockSpaceWindowFlags);
 			auto menuSize = DockspaceMenuBar();
+
 			ImVec2 windowSize((float)m_Width, (float)m_Height);
-			auto size = ImVec2();
+			auto size = ImVec2(windowSize);
 			size.y = windowSize.y - menuSize.y - 2.0f;
 			ImGui::DockSpace(dockSpaceID, size, ImGuiDockNodeFlags_NoWindowMenuButton);
+
+			if (!m_LayoutInitialized)
+				SetupLayout(dockSpaceID);
+
 			ImGui::End();
 			ImGui::PopStyleVar(3);
 		}
+
 	}
 
 	ImVec2 MainWindow::DockspaceMenuBar()
 	{
 		ImGui::BeginMenuBar();
 		{
-
 			if (ImGui::BeginMenu("File"))
 			{
 				if (ImGui::MenuItem("Reset Layout"))
@@ -253,17 +258,17 @@ namespace IDE
 
 	void MainWindow::ImGuiLayer()
 	{
-		RegisterFileImGui();
-		LogImGui();
-		TextEditorImGui();
+		RegisterFileWindow();
+		LogWindow();
+		TextEditorWindow();
 	}
 
-	void MainWindow::LogImGui()
+	void MainWindow::LogWindow()
 	{
 		Util::Logger::Draw(m_LogWindowName.c_str(), nullptr, ImGuiWindowFlags_None);
 	}
 
-	void MainWindow::RegisterFileImGui()
+	void MainWindow::RegisterFileWindow()
 	{
 		ImGui::Begin(m_RegisterFileWindowName.c_str());
 		{
@@ -361,7 +366,7 @@ namespace IDE
 		ImGui::End();
 	}
 
-	void MainWindow::TextEditorImGui()
+	void MainWindow::TextEditorWindow()
 	{
 		auto cpos = m_TextEditor.GetCursorPosition();
 
