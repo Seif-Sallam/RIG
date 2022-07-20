@@ -303,16 +303,13 @@ namespace IDE
 			0xffaaaaaa, // "LocalVariable"
 			0xff888888	// "FunctionArgument"
 		};
-		static float cols[32][3];
+		static ImColor cols[32];
 		static bool init = false;
 		if(!init)
 		{
 			for(int i =0 ;i < 32; i++)
-			{
-				cols[i][2] = float(p[i] & 0xff) / 255.0;
-				cols[i][1] = float((p[i] >> 8) & 0xff) / 255.0;
-				cols[i][0] = float((p[i] >> 16) & 0xff) / 255.0;
-			}
+				cols[i] = p[i];
+
 			init = true;
 		}
 		static std::vector<std::string> titles= {
@@ -353,11 +350,9 @@ namespace IDE
 		for(int i = 0; i < (int)32; i++)
 		{
 			std::string title = titles[i] + "###" +  std::to_string(i);
-			ImGui::ColorEdit3(title.c_str(), cols[i]);
+			ImGui::ColorEdit3(title.c_str(), &cols[i].Value.x);
 
-			uint32_t color = p[i] & 0xff000000;
-			uint32_t r = std::floor(cols[i][0]* 255) , g = std::floor(cols[i][1] * 255), b = std::floor(cols[i][2]* 255);
-			color = color | b << 16 | g << 8 | r;
+			uint32_t color = cols[i];
 			p[i] = color;
 		}
 		m_TextEditor.SetPalette(p);
