@@ -285,7 +285,7 @@ namespace IDE
 		};
 
 		TextEditor();
-		~TextEditor();
+		~TextEditor() = default;
 
 		void SetLanguageDefinition(const LanguageDefinition &aLanguageDef);
 		const LanguageDefinition &GetLanguageDefinition() const { return mLanguageDefinition; }
@@ -554,9 +554,9 @@ namespace IDE
 		Coordinates ScreenPosToCoordinates(const ImVec2 &aPosition) const;
 		Coordinates MousePosToCoordinates(const ImVec2 &aPosition) const;
 		ImVec2 CoordinatesToScreenPos(const TextEditor::Coordinates &aPosition) const;
-		Coordinates FindWordStart(const Coordinates &aFrom) const;
-		Coordinates FindWordEnd(const Coordinates &aFrom) const;
-		Coordinates FindNextWord(const Coordinates &aFrom) const;
+		Coordinates FindWordStart(Coordinates aFrom) const;
+		Coordinates FindWordEnd(Coordinates aFrom) const;
+		Coordinates FindNextWord(Coordinates aFrom) const;
 		int GetCharacterIndex(const Coordinates &aCoordinates) const;
 		int GetCharacterColumn(int aLine, int aIndex) const;
 		int GetLineCharacterCount(int aLine) const;

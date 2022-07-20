@@ -367,7 +367,9 @@ namespace IDE
 
 		ImGui::Begin(m_TextEditorWindowName.c_str(), nullptr, ImGuiWindowFlags_HorizontalScrollbar);
 		{
-			ImGui::Text("%6d/%-6d %6d lines  | %s | %s | %s | %s", cpos.mLine + 1, cpos.mColumn + 1, m_TextEditor.GetTotalLines(),
+			ImGui::Text("%6d/%-6d %6d lines  | %s | %s | %s | %s",
+						cpos.mLine + 1, cpos.mColumn + 1,
+						m_TextEditor.GetTotalLines(),
 						m_TextEditor.IsOverwrite() ? "Ovr" : "Ins",
 						m_TextEditor.CanUndo() ? "*" : " ",
 						m_TextEditor.GetLanguageDefinition().mName.c_str(), "~/Desktop/Assembler.txt");

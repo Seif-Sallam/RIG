@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <iostream>
 #include <functional>
 #include <chrono>
 #include <string>
@@ -6,14 +7,17 @@
 #include <cmath>
 #include "IDE/TextEditor.h"
 
+#include "Utils/Logger.h"
+
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include "imgui.h" // for imGui::GetCurrentWindow()
 #include "imgui_internal.h"
 
+
 namespace IDE
 {
 
-	// TODO
+	// TODO remove the support for utf8 characters
 	// - multiline comments vs single-line: latter is blocking start of a ML
 
 	template <class InputIt1, class InputIt2, class BinaryPredicate>
@@ -167,10 +171,6 @@ namespace IDE
 			ret[(int)TextEditor::ShortcutID::DebugJumpHere] 			= TextEditor::Shortcut(ImGuiKey_H			, -1, 1, 1, 0);		// CTRL+ALT+H
 		}
 		return ret;
-	}
-
-	TextEditor::~TextEditor()
-	{
 	}
 
 	void TextEditor::SetLanguageDefinition(const LanguageDefinition &aLanguageDef)
@@ -339,10 +339,8 @@ namespace IDE
 
 	void TextEditor::DeleteRange(const Coordinates &aStart, const Coordinates &aEnd)
 	{
-		assert(aEnd >= aStart);
+		assert(aEnd > aStart);
 		assert(!mReadOnly);
-
-		// printf("D(%d.%d)-(%d.%d)\n", aStart.mLine, aStart.mColumn, aEnd.mLine, aEnd.mColumn);
 
 		if (aEnd == aStart)
 			return;
@@ -353,10 +351,10 @@ namespace IDE
 		if (aStart.mLine == aEnd.mLine)
 		{
 			auto &line = mLines[aStart.mLine];
-			auto n = GetLineMaxColumn(aStart.mLine);
-			if (aEnd.mColumn >= n)
+			// Remove the line content from the start to end
+			if (aEnd.mColumn >= GetLineMaxColumn(aStart.mLine))
 				line.erase(line.begin() + start, line.end());
-			else
+			else // or remove it from the start to the end selection
 				line.erase(line.begin() + start, line.begin() + end);
 		}
 		else
@@ -364,12 +362,14 @@ namespace IDE
 			auto &firstLine = mLines[aStart.mLine];
 			auto &lastLine = mLines[aEnd.mLine];
 
+			// erase the selected bits from first line and line in the selection
 			firstLine.erase(firstLine.begin() + start, firstLine.end());
 			lastLine.erase(lastLine.begin(), lastLine.begin() + end);
 
+			// Insert in the first line the rest of the last line
 			if (aStart.mLine < aEnd.mLine)
 				firstLine.insert(firstLine.end(), lastLine.begin(), lastLine.end());
-
+			// remove the lines in between the start and the ened
 			if (aStart.mLine < aEnd.mLine)
 				RemoveLine(aStart.mLine + 1, aEnd.mLine + 1);
 		}
@@ -385,6 +385,7 @@ namespace IDE
 		assert(!mReadOnly);
 
 		int autoIndentStart = 0;
+		// Count the number of indentation characters that exist in the line
 		for (int i = 0; i < mLines[aWhere.mLine].size() && indent; i++)
 		{
 			Char ch = mLines[aWhere.mLine][i].mChar;
@@ -429,6 +430,7 @@ namespace IDE
 
 				if (indent)
 				{
+					// This will always be false?
 					bool lineIsAlreadyIndent = (isspace(*aValue) && *aValue != '\n' && *aValue != '\r');
 
 					// first check if we need to "unindent"
@@ -504,15 +506,7 @@ namespace IDE
 	void TextEditor::AddUndo(UndoRecord &aValue)
 	{
 		assert(!mReadOnly);
-		// printf("AddUndo: (@%d.%d) +\'%s' [%d.%d .. %d.%d], -\'%s', [%d.%d .. %d.%d] (@%d.%d)\n",
-		//	aValue.mBefore.mCursorPosition.mLine, aValue.mBefore.mCursorPosition.mColumn,
-		//	aValue.mAdded.c_str(), aValue.mAddedStart.mLine, aValue.mAddedStart.mColumn, aValue.mAddedEnd.mLine, aValue.mAddedEnd.mColumn,
-		//	aValue.mRemoved.c_str(), aValue.mRemovedStart.mLine, aValue.mRemovedStart.mColumn, aValue.mRemovedEnd.mLine, aValue.mRemovedEnd.mColumn,
-		//	aValue.mAfter.mCursorPosition.mLine, aValue.mAfter.mCursorPosition.mColumn
-		//	);
-
-		mUndoBuffer.resize((size_t)(mUndoIndex + 1));
-		mUndoBuffer.back() = aValue;
+		mUndoBuffer.push_back(aValue);
 		++mUndoIndex;
 	}
 
@@ -621,22 +615,22 @@ namespace IDE
 		return SanitizeCoordinates(Coordinates(lineNo, columnCoord - modifier));
 	}
 
-	TextEditor::Coordinates TextEditor::FindWordStart(const Coordinates &aFrom) const
+	TextEditor::Coordinates TextEditor::FindWordStart(Coordinates aFrom) const
 	{
 		Coordinates at = aFrom;
-		if (at.mLine >= (int)mLines.size())
-			return at;
+		if (aFrom.mLine >= (int)mLines.size())
+			return aFrom;
 
-		auto &line = mLines[at.mLine];
-		auto cindex = GetCharacterIndex(at);
+		auto &line = mLines[aFrom.mLine];
+		auto cindex = GetCharacterIndex(aFrom);
 
 		if (cindex >= (int)line.size())
-			return at;
+			return aFrom;
 
 		while (cindex > 0 && isspace(line[cindex].mChar))
 			--cindex;
 
-		auto cstart = (PaletteIndex)line[cindex].mColorIndex;
+		auto cstart = line[cindex].mColorIndex;
 		while (cindex > 0)
 		{
 			auto c = line[cindex].mChar;
@@ -647,25 +641,24 @@ namespace IDE
 					cindex++;
 					break;
 				}
-				if (cstart != (PaletteIndex)line[size_t(cindex - 1)].mColorIndex)
+				if (cstart != line[size_t(cindex - 1)].mColorIndex)
 					break;
 			}
 			--cindex;
 		}
-		return Coordinates(at.mLine, GetCharacterColumn(at.mLine, cindex));
+		return Coordinates(aFrom.mLine, GetCharacterColumn(aFrom.mLine, cindex));
 	}
 
-	TextEditor::Coordinates TextEditor::FindWordEnd(const Coordinates &aFrom) const
+	TextEditor::Coordinates TextEditor::FindWordEnd(Coordinates aFrom) const
 	{
-		Coordinates at = aFrom;
-		if (at.mLine >= (int)mLines.size())
-			return at;
+		if (aFrom.mLine >= (int)mLines.size())
+			return aFrom;
 
-		auto &line = mLines[at.mLine];
-		auto cindex = GetCharacterIndex(at);
+		auto &line = mLines[aFrom.mLine];
+		auto cindex = GetCharacterIndex(aFrom);
 
 		if (cindex >= (int)line.size())
-			return at;
+			return aFrom;
 
 		bool prevspace = (bool)isspace(line[cindex].mChar);
 		auto cstart = (PaletteIndex)line[cindex].mColorIndex;
@@ -688,38 +681,37 @@ namespace IDE
 		return Coordinates(aFrom.mLine, GetCharacterColumn(aFrom.mLine, cindex));
 	}
 
-	TextEditor::Coordinates TextEditor::FindNextWord(const Coordinates &aFrom) const
+	TextEditor::Coordinates TextEditor::FindNextWord(Coordinates aFrom) const
 	{
-		Coordinates at = aFrom;
-		if (at.mLine >= (int)mLines.size())
-			return at;
+		if (aFrom.mLine >= (int)mLines.size())
+			return aFrom;
 
 		// skip to the next non-word character
 		auto cindex = GetCharacterIndex(aFrom);
 		bool isword = false;
 		bool skip = false;
-		if (cindex < (int)mLines[at.mLine].size())
+		if (cindex < (int)mLines[aFrom.mLine].size())
 		{
-			auto &line = mLines[at.mLine];
+			auto &line = mLines[aFrom.mLine];
 			isword = isalnum(line[cindex].mChar);
 			skip = isword;
 		}
 
 		while (!isword || skip)
 		{
-			if (at.mLine >= mLines.size())
+			if (aFrom.mLine >= mLines.size())
 			{
 				auto l = std::max(0, (int)mLines.size() - 1);
 				return Coordinates(l, GetLineMaxColumn(l));
 			}
 
-			auto &line = mLines[at.mLine];
+			auto &line = mLines[aFrom.mLine];
 			if (cindex < (int)line.size())
 			{
 				isword = isalnum(line[cindex].mChar);
 
 				if (isword && !skip)
-					return Coordinates(at.mLine, GetCharacterColumn(at.mLine, cindex));
+					return Coordinates(aFrom.mLine, GetCharacterColumn(aFrom.mLine, cindex));
 
 				if (!isword)
 					skip = false;
@@ -729,13 +721,13 @@ namespace IDE
 			else
 			{
 				cindex = 0;
-				++at.mLine;
+				++aFrom.mLine;
 				skip = false;
 				isword = false;
 			}
 		}
 
-		return at;
+		return aFrom;
 	}
 
 	int TextEditor::GetCharacterIndex(const Coordinates &aCoordinates) const
@@ -743,14 +735,12 @@ namespace IDE
 		if (aCoordinates.mLine >= mLines.size())
 			return -1;
 		auto &line = mLines[aCoordinates.mLine];
-		int c = 0;
+		int col = 0;
 		int i = 0;
-		for (; i < line.size() && c < aCoordinates.mColumn;)
+		while(i < line.size() && col < aCoordinates.mColumn)
 		{
-			if (line[i].mChar == '\t')
-				c = (c / mTabSize) * mTabSize + mTabSize;
-			else
-				++c;
+			const auto& c = line[i].mChar;
+			col += (c == '\t') ? mTabSize : 1;
 			i += UTF8CharLength(line[i].mChar);
 		}
 		return i;
@@ -767,10 +757,7 @@ namespace IDE
 		{
 			auto c = line[i].mChar;
 			i += UTF8CharLength(c);
-			if (c == '\t')
-				col = (col / mTabSize) * mTabSize + mTabSize;
-			else
-				col++;
+			col += (c == '\t') ? mTabSize : 1;
 		}
 		return col;
 	}
@@ -792,13 +779,10 @@ namespace IDE
 			return 0;
 		auto &line = mLines[aLine];
 		int col = 0;
-		for (unsigned i = 0; i < line.size();)
+		for (int i = 0; i < (int)line.size();)
 		{
 			auto c = line[i].mChar;
-			if (c == '\t')
-				col = (col / mTabSize) * mTabSize + mTabSize;
-			else
-				col++;
+			col += (c == '\t') ? mTabSize : 1;
 			i += UTF8CharLength(c);
 		}
 		return col;
