@@ -9,7 +9,7 @@
 #include <string>
 #include <imgui.h>
 #include <imguial_term.h>
-#include <TextEditor.h>
+#include "IDE/TextEditor.h"
 
 namespace IDE
 {

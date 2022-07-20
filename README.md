@@ -30,10 +30,10 @@ RISC32I
 - Dumping the instructions in binary / hexadecimal / ascii binary.
 - Disassembling the binary format to readable assembly instructions. (NO DATA SECTION, NOT NECC. WORKING CODE, JUST INSTRUCTIONS DISASSEMBLED)
 - Loggers
+- Has a Text editor (Not 100% ready yet, but with several features available)
 
 # Next STEPS:
 
-- Adding the text editor
 - Constructing the IDE
 - Pesudo instructions
 - Pre-processing stage:
