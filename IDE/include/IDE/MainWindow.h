@@ -42,6 +42,12 @@ namespace IDE
 		ImFont* AddFont(const char* path, uint32_t pixelSize);
 		void RemoveTTForOTF(std::string& str) const;
 
+		// State
+		void LoadState();
+		void SaveState();
+
+		void SaveDocument(const std::string& path, const std::string& name);
+
 		// GUI
 		ImVec2 DockspaceMenuBar();
 		void LogWindow();
