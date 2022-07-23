@@ -1,5 +1,5 @@
 #include <algorithm>
-#include <iostream>
+#include <fstream>
 #include <functional>
 #include <chrono>
 #include <string>
@@ -103,6 +103,23 @@ namespace IDE
 		SetLanguageDefinition(LanguageDefinition::RISCV());
 		mLines.emplace_back();
 		mShortcuts = GetDefaultShortcuts();
+	}
+
+	bool TextEditor::ReadFile(const std::string& filePath)
+	{
+		std::ifstream inputFile(filePath, std::ios::binary | std::ios::ate);
+
+		if (!inputFile.is_open())
+			return false;
+
+
+		size_t fileSize = inputFile.tellg();
+		inputFile.seekg(inputFile.beg);
+		std::string fileContent(fileSize + 1, '\0');
+		inputFile.read(fileContent.data(), fileSize);
+		SetText(fileContent);
+		SetCurrentOpenedPath(filePath);
+		return true;
 	}
 
 	const std::vector<TextEditor::Shortcut> TextEditor::GetDefaultShortcuts()

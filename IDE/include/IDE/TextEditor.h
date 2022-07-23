@@ -287,6 +287,8 @@ namespace IDE
 		TextEditor();
 		~TextEditor() = default;
 
+
+		bool ReadFile(const std::string& filePath);
 		void SetLanguageDefinition(const LanguageDefinition &aLanguageDef);
 		const LanguageDefinition &GetLanguageDefinition() const { return mLanguageDefinition; }
 
@@ -490,8 +492,8 @@ namespace IDE
 
 		std::function<void(TextEditor *)> OnContentUpdate;
 
-		inline void SetPath(const std::string &path) { mPath = path; }
-		inline const std::string &GetPath() { return mPath; }
+		inline void SetCurrentOpenedPath(const std::string &path) { mPath = path; }
+		inline const std::string &GetCurrentOpenedPath() { return mPath; }
 
 	private:
 		std::string mPath;

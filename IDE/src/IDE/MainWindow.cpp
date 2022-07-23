@@ -54,6 +54,7 @@ namespace IDE
 
 		LoadState();
 		m_TextEditor.SetText(".data\n\n.text\n");
+		m_TextEditor.SetCurrentOpenedPath(RESOURCES_DIR"/Untitled");
 	}
 
 	MainWindow::~MainWindow()
@@ -79,7 +80,7 @@ namespace IDE
 		glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 		glfwWindowHint(GLFW_MAXIMIZED, true);
 
-		GLFWmonitor* monitor = glfwGetPrimaryMonitor();;
+		GLFWmonitor* monitor = glfwGetPrimaryMonitor();
 		auto mode = glfwGetVideoMode(monitor);
 		m_Height = mode->height;
 		m_Width = mode->width;
@@ -198,7 +199,6 @@ namespace IDE
 		ImGui::DockBuilderDockWindow(m_TextEditorWindowName.c_str(), dockSpaceID);
 		ImGui::DockBuilderDockWindow(m_LogWindowName.c_str(), dockSpaceIDBottom);
 		ImGui::DockBuilderDockWindow(m_RegisterFileWindowName.c_str(), dockSpaceIDRight);
-
 		ImGui::DockBuilderFinish(dockSpaceID);
 	}
 
@@ -593,8 +593,9 @@ namespace IDE
 		// uint32_t i = 0;
 		// for(auto& editor : m_Tabs)
 		{
+			ImGui::SetNextWindowDockID(ImGui::GetID("Dockspace"), ImGuiCond_Always);
 			// i++;
-			std::string title = m_TextEditorWindowName /*+ "###" + std::to_string(0)*/;
+			std::string title = m_TextEditor.GetCurrentOpenedPath() /*+ "###" + std::to_string(0)*/;
 			ImGui::Begin(title.c_str() , nullptr, ImGuiWindowFlags_HorizontalScrollbar);
 			{
 				ImGui::Text("%6d/%-6d %6d lines  | %s | %s | %s | %s",
