@@ -13,6 +13,7 @@
 #include <stdio.h>
 
 #include <Utils/Logger.h>
+#include <Utils/Functions.h>
 
 #include <filesystem>
 
@@ -40,6 +41,7 @@ namespace IDE
 		, m_LayoutInitialized(false)
 		, m_ActiveFontSize(24)
 		, m_ActiveFont("Consolos")
+		, m_WorkSpaceDir(RESOURCES_DIR"/")
 	{
 		s_Instance = this;
 
@@ -595,7 +597,9 @@ namespace IDE
 		{
 			ImGui::SetNextWindowDockID(ImGui::GetID("Dockspace"), ImGuiCond_Always);
 			// i++;
-			std::string title = m_TextEditor.GetCurrentOpenedPath() /*+ "###" + std::to_string(0)*/;
+
+			std::string title = Util::RemovePrefix(m_WorkSpaceDir, m_TextEditor.GetCurrentOpenedPath());
+
 			ImGui::Begin(title.c_str() , nullptr, ImGuiWindowFlags_HorizontalScrollbar);
 			{
 				ImGui::Text("%6d/%-6d %6d lines  | %s | %s | %s | %s",
@@ -603,7 +607,7 @@ namespace IDE
 							m_TextEditor.GetTotalLines(),
 							m_TextEditor.IsOverwrite() ? "Ovr" : "Ins",
 							m_TextEditor.CanUndo() ? "*" : " ",
-							m_TextEditor.GetLanguageDefinition().mName.c_str(), "~/Desktop/Assembler.txt");
+							m_TextEditor.GetLanguageDefinition().mName.c_str(), m_TextEditor.GetCurrentOpenedPath().c_str());
 				// ImGui::PushFont(m_Fonts[m_ActiveFontIndex]);
 				m_TextEditor.Render("TextEditor");
 				// ImGui::PopFont();

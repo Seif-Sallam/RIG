@@ -67,9 +67,11 @@ namespace IDE
 		const std::string m_TextEditorWindowName;
 		const std::string m_RegisterFileWindowName;
 		const std::string m_LogWindowName;
+		std::string m_WorkSpaceDir;
 
 		bool m_LayoutInitialized;
 		bool m_ConfigOpened;
+
 	};
 
 
