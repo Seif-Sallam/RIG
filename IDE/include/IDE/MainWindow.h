@@ -20,8 +20,8 @@ namespace IDE
 		void Run();
 		~MainWindow();
 
-		inline static void SetWidth(int32_t value) { m_Width = value; }
-		inline static void SetHeight(int32_t value) { m_Height = value; }
+		inline void SetWidth(int32_t value) { m_Width = value; }
+		inline void SetHeight(int32_t value) { m_Height = value; }
 
 	private:
 
@@ -38,15 +38,11 @@ namespace IDE
 		void SetupLayout(ImGuiID dockSpaceID);
 		void SetupDockspace();
 
-		// Options
-		ImFont* AddFont(const char* path, uint32_t pixelSize);
-		void RemoveTTForOTF(std::string& str) const;
-
 		// State
 		void LoadState();
 		void SaveState();
 
-		void SaveDocument(const std::string& path, const std::string& name);
+		void SaveDocument(const TextEditor& textEditor, const std::string& filePath);
 
 		// GUI
 		ImVec2 DockspaceMenuBar();
@@ -55,12 +51,14 @@ namespace IDE
 		void TextEditorWindow();
 		void SettingsWindow();
 		void ConfigWindow();
+
 	private:
-		static int32_t m_Width;
-		static int32_t m_Height;
+		int32_t m_Width;
+		int32_t m_Height;
 
 		GLFWwindow *m_Window;
 		TextEditor m_TextEditor;
+		std::vector<TextEditor> m_Tabs;
 
 		std::unordered_map<std::string, std::unordered_map<uint32_t, ImFont*>> m_Fonts;
 		std::string m_ActiveFont;
@@ -73,4 +71,6 @@ namespace IDE
 		bool m_LayoutInitialized;
 		bool m_ConfigOpened;
 	};
+
+
 }

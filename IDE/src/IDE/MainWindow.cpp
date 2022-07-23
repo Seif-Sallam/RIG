@@ -19,14 +19,21 @@
 namespace IDE
 {
 
-	int32_t MainWindow::m_Width = 800;
-	int32_t MainWindow::m_Height = 600;
+#pragma region Static Variables
+
+	using Log = Util::Logger;
+	static MainWindow* s_Instance = nullptr;
+
 	static void ErrorCallbackFunc(int error, const char *description);
 	static void KeyCallbackFunc(GLFWwindow *window, int key, int scancode, int action, int mods);
 	static void ViewPortResizeCallback(GLFWwindow *window, int width, int height);
+#pragma endregion
 
+#pragma region Constructor and Destructors
 	MainWindow::MainWindow(uint32_t argc, const char *argv[])
-		: m_TextEditorWindowName("Text Editors")
+		: m_Width(800)
+		, m_Height(600)
+		, m_TextEditorWindowName("Text Editors")
 		, m_LogWindowName("Log")
 		, m_RegisterFileWindowName("Register File")
 		, m_ConfigOpened(false)
@@ -34,65 +41,148 @@ namespace IDE
 		, m_ActiveFontSize(24)
 		, m_ActiveFont("Consolos")
 	{
+		s_Instance = this;
+
 		InitilizeWindow();
-		ImFontConfig cnfg;
-		cnfg.MergeMode =true;
-		static const ImWchar icons_ranges[] = { 0xf000, 0xf3ff, 0 }; // Will not be copied by AddFont* so keep in scope.
-		// AddFont(RESOURCES_DIR "/Fonts/Consolos.ttf", 24);
-		// ImGui::GetIO().Fonts[0].AddFontFromFileTTF(RESOURCES_DIR"/fonts/fa-solid-900.ttf", 20, &cnfg, icons_ranges);
 
 		m_TextEditor.SetFunctionTooltips(true);
 		m_TextEditor.SetShowWhitespaces(true);
-		auto lang = TextEditor::LanguageDefinition::RISCV();
 		m_TextEditor.SetColorizerEnable(true);
-		m_TextEditor.SetLanguageDefinition(lang);
-
+		m_TextEditor.SetLanguageDefinition(TextEditor::LanguageDefinition::RISCV());
 
 		this->AddDefaultFonts();
 
-
-
+		LoadState();
 		m_TextEditor.SetText(".data\n\n.text\n");
 	}
 
-	void MainWindow::RemoveTTForOTF(std::string& str) const
+	MainWindow::~MainWindow()
 	{
-		size_t index = str.find(".ttf");
-		if (index == std::string::npos)
-		{
-			index = str.find(".otf");
-			if(index = std::string::npos)
-				return;
-		}
-		str.erase(str.begin() + index, str.end());
+		SaveState();
+
+		ImGui_ImplOpenGL3_Shutdown();
+		ImGui_ImplGlfw_Shutdown();
+		ImGui::DestroyContext();
+
+		glfwDestroyWindow(m_Window);
+		glfwTerminate();
 	}
 
-	void MainWindow::AddDefaultFonts()
+	void MainWindow::InitilizeWindow()
 	{
-		m_Fonts.clear();
-		namespace fs = std::filesystem;
-		fs::path path(RESOURCES_DIR"/fonts/");
+		if (!glfwInit())
+			exit(-1);
+
+		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
+		glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+		glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+		glfwWindowHint(GLFW_MAXIMIZED, true);
+
+		GLFWmonitor* monitor = glfwGetPrimaryMonitor();;
+		auto mode = glfwGetVideoMode(monitor);
+		m_Height = mode->height;
+		m_Width = mode->width;
+
+		m_Window = glfwCreateWindow(m_Width, m_Height, "RIG v0.0.2", NULL, NULL);
+
+		if (!m_Window)
 		{
-			auto& consolosFont = m_Fonts[m_ActiveFont];
-			consolosFont[m_ActiveFontSize] = AddFont(RESOURCES_DIR"/fonts/Consolos.ttf", 24);
-			Util::Logger::Warning("{}", m_ActiveFontSize);
+			fprintf(stderr, "Failed to open GLFW window.\n");
+			glfwTerminate();
+			exit(-1);
 		}
-		for (auto entry : fs::directory_iterator(path))
+
+		glfwMakeContextCurrent(m_Window);
+
+		if (!gladLoadGL())
 		{
-			std::string fileName = entry.path().filename().string();
-			RemoveTTForOTF(fileName);
-			Util::Logger::Info("Adding font: {}", fileName);
-			for(uint32_t fontSize = 18; fontSize <= 48; fontSize+=2)
-				m_Fonts[fileName][fontSize] = AddFont(entry.path().string().c_str(), fontSize);
+			fprintf(stderr, "Couldn't load glad\n");
+			glfwTerminate();
+			exit(-1);
+		}
+		const GLubyte *renderer = glGetString(GL_RENDERER);
+		const GLubyte *version = glGetString(GL_VERSION);
+		fprintf(stdout, "Renderer: %s\n", renderer);
+		fprintf(stdout, "OpenGL version supported %s\n", version);
+
+		glfwSetKeyCallback(m_Window, KeyCallbackFunc);
+
+		glClearColor(0.0, 0.0, 0.0, 1.0);
+
+		glfwSetFramebufferSizeCallback(m_Window, ViewPortResizeCallback);
+		glfwSwapInterval(1); // Enable vsync
+
+		// Setup Dear ImGui context
+		IMGUI_CHECKVERSION();
+		ImGui::CreateContext();
+
+		ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+
+		ImGui::StyleColorsDark();
+
+		ImGui_ImplGlfw_InitForOpenGL(m_Window, true);
+		ImGui_ImplOpenGL3_Init("#version 130");
+	}
+
+#pragma endregion
+
+#pragma region Run_Functions
+
+	void MainWindow::Run()
+	{
+		while (!glfwWindowShouldClose(m_Window))
+		{
+			HandleEvents();
+
+			Update();
+
+			ImGui_ImplOpenGL3_NewFrame();
+			ImGui_ImplGlfw_NewFrame();
+			ImGui::NewFrame();
+
+			ImGui::PushFont(m_Fonts[m_ActiveFont][m_ActiveFontSize]);
+			{
+				SetupDockspace();
+				ImGuiLayer();
+			}
+			ImGui::PopFont();
+
+			Render();
 		}
 	}
 
-	ImFont* MainWindow::AddFont(const char* path, uint32_t pixelSize)
+	void MainWindow::HandleEvents()
 	{
-		auto font = ImGui::GetIO().Fonts->AddFontFromFileTTF(path, (float)pixelSize);
-		Util::Logger::Info("Loaded font: {}", path);
-		return font;
+		glfwPollEvents();
 	}
+
+	void MainWindow::ImGuiLayer()
+	{
+		ConfigWindow();
+		RegisterFileWindow();
+		LogWindow();
+		TextEditorWindow();
+	}
+
+	void MainWindow::Update()
+	{
+
+	}
+
+	void MainWindow::Render()
+	{
+		glClearColor(0.3f, 0.3f, 0.3f, 0.0f);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		ImGui::Render();
+		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+		glfwSwapBuffers(m_Window);
+	}
+
+#pragma endregion
+
+#pragma region Setup
 
 	void MainWindow::SetupLayout(ImGuiID dockSpaceID)
 	{
@@ -156,11 +246,12 @@ namespace IDE
 				}
 				if (ImGui::MenuItem("Save"))
 				{
-					auto textToSave = m_TextEditor.GetText();
+					// auto textToSave = m_TextEditor.GetText();
 					/// save text....
+					SaveDocument(m_TextEditor, "C:/Users/User/Desktop/OutputFile.txt");
 				}
 				if (ImGui::MenuItem("Config"))
-					m_ConfigOpened = true;
+					m_ConfigOpened = !m_ConfigOpened;
 				if (ImGui::MenuItem("Quit", "Alt+F4"))
 				{
 					// We should close :D
@@ -215,103 +306,136 @@ namespace IDE
 		ImGui::EndMenuBar();
 		return size;
 	}
-	void MainWindow::InitilizeWindow()
+
+	inline static void RemoveTTForOTF(std::string& str)
 	{
-		if (!glfwInit())
-			exit(-1);
-
-		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
-		glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-		glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-
-		const int width = m_Width;
-		const int height = m_Height;
-
-		m_Window = glfwCreateWindow(width, height, "RIG v0.0.2", NULL, NULL);
-
-		if (!m_Window)
+		size_t index = str.find(".ttf");
+		if (index == std::string::npos)
 		{
-			fprintf(stderr, "Failed to open GLFW window.\n");
-			glfwTerminate();
-			exit(-1);
+			index = str.find(".otf");
+			if(index = std::string::npos)
+				return;
 		}
-
-		glfwMakeContextCurrent(m_Window);
-
-		if (!gladLoadGL())
-		{
-			fprintf(stderr, "Couldn't load glad\n");
-			glfwTerminate();
-			exit(-1);
-		}
-		const GLubyte *renderer = glGetString(GL_RENDERER);
-		const GLubyte *version = glGetString(GL_VERSION);
-		fprintf(stdout, "Renderer: %s\n", renderer);
-		fprintf(stdout, "OpenGL version supported %s\n", version);
-
-		glfwSetKeyCallback(m_Window, KeyCallbackFunc);
-
-		glClearColor(0.0, 0.0, 0.0, 1.0);
-
-		glfwSetFramebufferSizeCallback(m_Window, ViewPortResizeCallback);
-		glfwSwapInterval(1); // Enable vsync
-
-		// Setup Dear ImGui context
-		IMGUI_CHECKVERSION();
-		ImGui::CreateContext();
-
-		ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-
-		ImGui::StyleColorsDark();
-
-		ImGui_ImplGlfw_InitForOpenGL(m_Window, true);
-		ImGui_ImplOpenGL3_Init("#version 130");
+		str.erase(str.begin() + index, str.end());
 	}
 
-	MainWindow::~MainWindow()
+	inline static ImFont* AddFont(const char* path, uint32_t pixelSize)
 	{
-		ImGui_ImplOpenGL3_Shutdown();
-		ImGui_ImplGlfw_Shutdown();
-		ImGui::DestroyContext();
-
-		glfwDestroyWindow(m_Window);
-		glfwTerminate();
+		auto font = ImGui::GetIO().Fonts->AddFontFromFileTTF(path, (float)pixelSize);
+		Log::Info("Loaded font: {}, Size: {}", path, pixelSize);
+		return font;
 	}
 
-	void MainWindow::Run()
+	void MainWindow::AddDefaultFonts()
 	{
-		while (!glfwWindowShouldClose(m_Window))
+		m_Fonts.clear();
+		namespace fs = std::filesystem;
+		fs::path path(RESOURCES_DIR"/fonts/");
 		{
-			HandleEvents();
-
-			ImGui_ImplOpenGL3_NewFrame();
-			ImGui_ImplGlfw_NewFrame();
-			ImGui::NewFrame();
-
-			ImGui::PushFont(m_Fonts[m_ActiveFont][m_ActiveFontSize]);
-
-			SetupDockspace();
-			ImGuiLayer();
-
-			ImGui::PopFont();
-			Render();
-			Update();
+			auto& consolosFont = m_Fonts[m_ActiveFont];
+			consolosFont[m_ActiveFontSize] = AddFont(RESOURCES_DIR"/fonts/Consolos.ttf", 24);
+		}
+		for (auto entry : fs::directory_iterator(path))
+		{
+			std::string fileName = entry.path().filename().string();
+			RemoveTTForOTF(fileName);
+			Log::Info("Adding font: {}", fileName);
+			for(uint32_t fontSize = 18; fontSize <= 48; fontSize+=2)
+				m_Fonts[fileName][fontSize] = AddFont(entry.path().string().c_str(), fontSize);
 		}
 	}
 
-	void MainWindow::HandleEvents()
+#pragma endregion
+
+#pragma region States
+	static const std::string g_SaveFile = RESOURCES_DIR"/ini/Config.ini";
+	struct ParseData{
+		std::string type;
+		std::string data;
+	};
+
+	inline static ParseData ParseLine(const std::string& line)
 	{
-		glfwPollEvents();
+		size_t colonIndex = line.find(":");
+		if(colonIndex == std::string::npos)
+			return {};
+
+		return { line.substr(0, colonIndex),
+				 line.substr(colonIndex + 2) };
 	}
 
-	void MainWindow::ImGuiLayer()
+	void MainWindow::LoadState()
 	{
-		ConfigWindow();
-		RegisterFileWindow();
-		LogWindow();
-		TextEditorWindow();
+		std::ifstream inputFile(g_SaveFile, std::ios::binary);
+		if (inputFile.is_open() == false)
+		{
+			Log::Warning("Failed to open config file, it will be created and written to it and deafult values will be loaded");
+			return;
+		}
+		while(!inputFile.eof())
+		{
+			std::string line;
+			std::getline(inputFile, line);
+			if (line.size() < 3) break;
+			ParseData parsedLine = ParseLine(line);
+			Log::Info("Config: {}", line);
+			if (parsedLine.type == "Font")
+			{
+				m_ActiveFont = parsedLine.data;
+				bool foundFont = false;
+				for (auto& font : m_Fonts)
+				{
+					if (font.first == m_ActiveFont)
+					{
+						foundFont = true;
+						break;
+					}
+				}
+				if (!foundFont)
+				{
+					m_ActiveFont = (*(m_Fonts.begin())).first;
+					Log::Error("Invalid font in Config file. Loaded font: {}", m_ActiveFont);
+				}
+			}
+			else if (parsedLine.type == "FontSize")
+			{
+				m_ActiveFontSize = std::stoi(parsedLine.data);
+				m_ActiveFontSize = std::clamp(m_ActiveFontSize, 18, 48);
+				m_ActiveFontSize = (m_ActiveFontSize % 2) ? m_ActiveFontSize + 1: m_ActiveFontSize;
+			}
+		}
 	}
+
+	void MainWindow::SaveState()
+	{
+		std::ofstream outputFile(g_SaveFile, std::ios::binary);
+		if (outputFile.is_open() == false)
+		{
+			Log::Warning("Failed to save config file.");
+			return;
+		}
+		outputFile << "Font: " << m_ActiveFont << '\n';
+		outputFile << "FontSize: " << m_ActiveFontSize << '\n';
+
+		Log::Success("Saved data to the config file: {}", g_SaveFile);
+	}
+
+	void MainWindow::SaveDocument(const TextEditor& editor, const std::string& filePath)
+	{
+		std::ofstream outputFile;
+		outputFile.open(filePath);
+		if(outputFile.is_open())
+		{
+			outputFile << editor.GetText();
+			Log::Success("File Saved Successfully, {}", filePath);
+		}
+		else
+		{
+			Log::Error("File was not saved, {}", filePath);
+		}
+	}
+
+#pragma endregion
 
 	void MainWindow::ConfigWindow()
 	{
@@ -341,10 +465,10 @@ namespace IDE
 				ImGui::TextUnformatted("Pixel Size: ");
 				ImGui::SameLine();
 				ImGui::SliderInt("###pixel_size_choser", &pixelSize, 18, 48);
+				pixelSize = (pixelSize % 2) ? pixelSize + 1 : pixelSize;
 				bool activeButton = selectedFont != m_ActiveFont || pixelSize != currentFontSize;
 				if (ImGuiAl::Button("Change Font", activeButton))
 				{
-					pixelSize = (pixelSize % 2) ? pixelSize + 1 : pixelSize;
 					m_ActiveFont = selectedFont;
 					m_ActiveFontSize = pixelSize;
 					selectedFont = m_ActiveFont;
@@ -362,7 +486,7 @@ namespace IDE
 
 	void MainWindow::LogWindow()
 	{
-		Util::Logger::Draw(m_LogWindowName.c_str(), nullptr, ImGuiWindowFlags_None);
+		Log::Draw(m_LogWindowName.c_str(), nullptr, ImGuiWindowFlags_None);
 	}
 
 	void MainWindow::RegisterFileWindow()
@@ -466,40 +590,31 @@ namespace IDE
 	void MainWindow::TextEditorWindow()
 	{
 		auto cpos = m_TextEditor.GetCursorPosition();
-
-		ImGui::Begin(m_TextEditorWindowName.c_str(), nullptr, ImGuiWindowFlags_HorizontalScrollbar);
+		// uint32_t i = 0;
+		// for(auto& editor : m_Tabs)
 		{
-			ImGui::Text("%6d/%-6d %6d lines  | %s | %s | %s | %s",
-						cpos.mLine + 1, cpos.mColumn + 1,
-						m_TextEditor.GetTotalLines(),
-						m_TextEditor.IsOverwrite() ? "Ovr" : "Ins",
-						m_TextEditor.CanUndo() ? "*" : " ",
-						m_TextEditor.GetLanguageDefinition().mName.c_str(), "~/Desktop/Assembler.txt");
-			// ImGui::PushFont(m_Fonts[m_ActiveFontIndex]);
-			m_TextEditor.Render("TextEditor");
-			// ImGui::PopFont();
+			// i++;
+			std::string title = m_TextEditorWindowName /*+ "###" + std::to_string(0)*/;
+			ImGui::Begin(title.c_str() , nullptr, ImGuiWindowFlags_HorizontalScrollbar);
+			{
+				ImGui::Text("%6d/%-6d %6d lines  | %s | %s | %s | %s",
+							cpos.mLine + 1, cpos.mColumn + 1,
+							m_TextEditor.GetTotalLines(),
+							m_TextEditor.IsOverwrite() ? "Ovr" : "Ins",
+							m_TextEditor.CanUndo() ? "*" : " ",
+							m_TextEditor.GetLanguageDefinition().mName.c_str(), "~/Desktop/Assembler.txt");
+				// ImGui::PushFont(m_Fonts[m_ActiveFontIndex]);
+				m_TextEditor.Render("TextEditor");
+				// ImGui::PopFont();
+			}
+			ImGui::End();
 		}
-		ImGui::End();
 	}
 
-	void MainWindow::Update()
-	{
-
-	}
-
-	void MainWindow::Render()
-	{
-		glClearColor(0.3f, 0.3f, 0.3f, 0.0f);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		ImGui::Render();
-		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-
-		glfwSwapBuffers(m_Window);
-	}
 	void ViewPortResizeCallback(GLFWwindow *window, int width, int height)
 	{
-		MainWindow::SetWidth(width);
-		MainWindow::SetHeight(height);
+		s_Instance->SetWidth(width);
+		s_Instance->SetHeight(height);
 		glViewport(0, 0, width, height);
 	}
 	void KeyCallbackFunc(GLFWwindow *window, int key, int scancode, int action, int mods)

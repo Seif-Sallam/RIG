@@ -56,7 +56,9 @@ namespace Util
 		if (ImGui::Button("Copy"))
 			ImGui::LogToClipboard();
 		ImGui::Separator();
-		m_Filter.Draw("Filter", -100.0f);
+		ImGui::TextUnformatted("Filter");
+		ImGui::SameLine();
+		m_Filter.Draw("###Filter", -100.0f);
 		ImGui::Separator();
 		ImGui::BeginChild("scrolling", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar);
 
