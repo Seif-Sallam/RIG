@@ -45,7 +45,7 @@ namespace IDE
 	{
 		s_Instance = this;
 
-		InitilizeWindow();
+		InitializeWindow();
 
 		m_TextEditor.SetFunctionTooltips(true);
 		m_TextEditor.SetShowWhitespaces(true);
@@ -55,6 +55,7 @@ namespace IDE
 		this->AddDefaultFonts();
 
 		LoadState();
+		SetUpSettings();
 		m_TextEditor.SetText(".data\n\n.text\n");
 		m_TextEditor.SetCurrentOpenedPath(RESOURCES_DIR"/Untitled");
 	}
@@ -71,7 +72,7 @@ namespace IDE
 		glfwTerminate();
 	}
 
-	void MainWindow::InitilizeWindow()
+	void MainWindow::InitializeWindow()
 	{
 		if (!glfwInit())
 			exit(-1);
@@ -128,6 +129,59 @@ namespace IDE
 		ImGui_ImplOpenGL3_Init("#version 130");
 	}
 
+
+	void MainWindow::SetUpSettings()
+	{
+		m_Settings.push_back(std::make_pair(
+			"Font", [](IDE::MainWindow* ide)
+			{
+				Util::BeginGroupPanel("Font");
+				static std::string selectedFont = ide->m_ActiveFont;
+				static int32_t pixelSize = ide->m_ActiveFontSize;
+				// Begin a combo box that contains the options for the fonts
+				uint32_t currentFontSize = ide->m_ActiveFontSize;
+				ImGui::Text("Active Font: %s, Size: %u", ide->m_ActiveFont.c_str(), currentFontSize);
+				if (ImGui::BeginCombo("###1", selectedFont.c_str()))
+				{
+					for (auto& entry : ide->m_Fonts)
+					{
+						if (ImGui::RadioButton(entry.first.c_str(), selectedFont == entry.first))
+						{
+							selectedFont = entry.first;
+						}
+					}
+					// End the combo box provided we opened it
+					ImGui::EndCombo();
+				}
+				ImGui::TextUnformatted("Pixel Size: ");
+				ImGui::SameLine();
+				ImGui::SliderInt("###pixel_size_choser", &pixelSize, 18, 48);
+				pixelSize = (pixelSize % 2) ? pixelSize + 1 : pixelSize;
+				bool activeButton = selectedFont != ide->m_ActiveFont || pixelSize != currentFontSize;
+				if (ImGuiAl::Button("Change Font", activeButton))
+				{
+					ide->m_ActiveFont = selectedFont;
+					ide->m_ActiveFontSize = pixelSize;
+					selectedFont = ide->m_ActiveFont;
+					pixelSize = ide->m_ActiveFontSize;
+				}
+
+				Util::EndGroupPanel();
+			}
+		));
+
+		m_Settings.push_back(std::make_pair(
+			"Font2",
+			[](MainWindow* ide)
+			{
+				ImGui::Separator();
+				Util::BeginGroupPanel("Test Panal");
+				ImGui::TextUnformatted("hello, world second thing");
+
+				Util::EndGroupPanel();
+			}
+		));
+	}
 #pragma endregion
 
 #pragma region Run_Functions
@@ -441,49 +495,19 @@ namespace IDE
 
 	void MainWindow::ConfigWindow()
 	{
-		static std::string selectedFont = m_ActiveFont;
-		if (m_ConfigOpened)
-		{
+		if(m_ConfigOpened)
+	{
 			ImGuiWindowFlags configsWindowFlags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking
 												  | ImGuiWindowFlags_AlwaysAutoResize;
 			ImGui::Begin("Config", &m_ConfigOpened, configsWindowFlags);
 			{
-				static int32_t pixelSize = m_ActiveFontSize;
-				// Begin a combo box that contains the options for the fonts
-				uint32_t currentFontSize = m_ActiveFontSize;
-				ImGui::Text("Active Font: %s, Size: %u", m_ActiveFont.c_str(), currentFontSize);
-				if (ImGui::BeginCombo("###1", selectedFont.c_str()))
-				{
-					for (auto& entry : m_Fonts)
-					{
-						if (ImGui::RadioButton(entry.first.c_str(), selectedFont == entry.first))
-						{
-							selectedFont = entry.first;
-						}
-					}
-					// End the combo box provided we opened it
-					ImGui::EndCombo();
-				}
-				ImGui::TextUnformatted("Pixel Size: ");
-				ImGui::SameLine();
-				ImGui::SliderInt("###pixel_size_choser", &pixelSize, 18, 48);
-				pixelSize = (pixelSize % 2) ? pixelSize + 1 : pixelSize;
-				bool activeButton = selectedFont != m_ActiveFont || pixelSize != currentFontSize;
-				if (ImGuiAl::Button("Change Font", activeButton))
-				{
-					m_ActiveFont = selectedFont;
-					m_ActiveFontSize = pixelSize;
-					selectedFont = m_ActiveFont;
-					pixelSize = m_ActiveFontSize;
-				}
+				for(auto& s : m_Settings)
+					s.second(this);
+				// m_Settings.Execute("Font", this);
 			}
 			ImGui::End();
-		}
-		else
-		{
-			selectedFont = m_ActiveFont;
-		}
 
+		}
 	}
 
 	void MainWindow::LogWindow()

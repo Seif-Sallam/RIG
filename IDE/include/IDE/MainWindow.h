@@ -7,8 +7,10 @@
 
 #include <iostream>
 #include <string>
+#include <unordered_map>
 #include <imgui.h>
 #include <imguial_term.h>
+
 #include "IDE/TextEditor.h"
 
 namespace IDE
@@ -24,7 +26,6 @@ namespace IDE
 		inline void SetHeight(int32_t value) { m_Height = value; }
 
 	private:
-
 		// The main loop
 		void HandleEvents();
 		void ImGuiLayer();
@@ -33,7 +34,8 @@ namespace IDE
 
 
 		// Setting up
-		void InitilizeWindow();
+		void InitializeWindow();
+		void SetUpSettings();
 		void AddDefaultFonts();
 		void SetupLayout(ImGuiID dockSpaceID);
 		void SetupDockspace();
@@ -72,6 +74,7 @@ namespace IDE
 		bool m_LayoutInitialized;
 		bool m_ConfigOpened;
 
+		std::vector<std::pair<std::string, void(*)(MainWindow*)>> m_Settings;
 	};
 
 
