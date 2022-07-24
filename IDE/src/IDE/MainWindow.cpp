@@ -171,7 +171,7 @@ namespace IDE
 		));
 
 		m_Settings.push_back(std::make_pair(
-			"Font2",
+			"Second Screen",
 			[](MainWindow* ide)
 			{
 				ImGui::Separator();
@@ -493,17 +493,105 @@ namespace IDE
 
 #pragma endregion
 
+	// Fills lps[] for given patttern pat[0..M-1]
+	inline static void computeLPSArray(char* pat, int M, int* lps)
+	{
+		// length of the previous longest prefix suffix
+		int len = 0;
+
+		lps[0] = 0; // lps[0] is always 0
+
+		// the loop calculates lps[i] for i = 1 to M-1
+		int i = 1;
+		while (i < M) {
+			if (pat[i] == pat[len]) {
+				len++;
+				lps[i] = len;
+				i++;
+			}
+			else // (pat[i] != pat[len])
+			{
+				// This is tricky. Consider the example.
+				// AAACAAAA and i = 7. The idea is similar
+				// to search step.
+				if (len != 0) {
+					len = lps[len - 1];
+
+					// Also, note that we do not increment
+					// i here
+				}
+				else // if (len == 0)
+				{
+					lps[i] = 0;
+					i++;
+				}
+			}
+		}
+	}
+
+	// Prints occurrences of txt[] in pat[]
+	inline static bool KMPSearch(char* pat, char* txt)
+	{
+		int M = (int)strlen(pat);
+		int N = (int)strlen(txt);
+
+		// create lps[] that will hold the longest prefix suffix
+		// values for pattern
+		// int lps[M];
+		int lps[256];
+		// Preprocess the pattern (calculate lps[] array)
+		computeLPSArray(pat, M, lps);
+
+		int i = 0; // index for txt[]
+		int j = 0; // index for pat[]
+		while ((N - i) >= (M - j)) {
+			if (pat[j] == txt[i]) {
+				j++;
+				i++;
+			}
+
+			if (j == M) {
+				return true;
+				j = lps[j - 1];
+			}
+
+			// mismatch after j matches
+			else if (i < N && pat[j] != txt[i]) {
+				// Do not match lps[0..lps[j-1]] characters,
+				// they will match anyway
+				if (j != 0)
+					j = lps[j - 1];
+				else
+					i = i + 1;
+			}
+		}
+		return false;
+	}
+
 	void MainWindow::ConfigWindow()
 	{
 		if(m_ConfigOpened)
-	{
+		{
 			ImGuiWindowFlags configsWindowFlags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking
 												  | ImGuiWindowFlags_AlwaysAutoResize;
 			ImGui::Begin("Config", &m_ConfigOpened, configsWindowFlags);
 			{
+				static std::string filter(256, '\0');
+				static std::string filterCopy(256, '\0');
+				ImGui::TextUnformatted("Filter");
+				ImGui::SameLine();
+				ImGui::InputText("###inputFilter", filter.data(), 255);
+				filterCopy = filter;
+				for(auto& c : filterCopy)
+					c = tolower(c);
 				for(auto& s : m_Settings)
-					s.second(this);
-				// m_Settings.Execute("Font", this);
+				{
+					std::string nameCpy = s.first;
+					for(auto& c : nameCpy)
+						c = tolower(c);
+					if (KMPSearch(filterCopy.data(), nameCpy.data()))
+						s.second(this);
+				}
 			}
 			ImGui::End();
 
