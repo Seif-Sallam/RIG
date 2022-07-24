@@ -28,6 +28,41 @@ namespace IDE
 	static void ErrorCallbackFunc(int error, const char *description);
 	static void KeyCallbackFunc(GLFWwindow *window, int key, int scancode, int action, int mods);
 	static void ViewPortResizeCallback(GLFWwindow *window, int width, int height);
+
+	static std::vector<std::string> paletteNames= {
+			"Default"
+			,"Keyword"
+			,"Number"
+			,"String"
+			,"Char literal"
+			,"Punctuation"
+			,"Preprocessor"
+			,"Identifier"
+			,"Known identifier"
+			,"Preproc identifier"
+			,"Comment (single line)"
+			,"Comment (multi line)"
+			,"Background"
+			,"Cursor"
+			,"Selection"
+			,"ErrorMarker"
+			,"Breakpoint"
+			,"Breakpoint outline"
+			,"Current line indicator"
+			,"Current line indicator outline"
+			,"Line number"
+			,"Current line fill"
+			,"Current line fill (inactive)"
+			,"Current line edge"
+			,"Error message"
+			,"BreakpointDisabled"
+			,"UserFunction"
+			,"UserType"
+			,"UniformType"
+			,"GlobalVariable"
+			,"LocalVariable"
+			,"FunctionArgument"
+		};
 #pragma endregion
 
 #pragma region Constructor and Destructors
@@ -58,6 +93,8 @@ namespace IDE
 		SetUpSettings();
 		m_TextEditor.SetText(".data\n\n.text\n");
 		m_TextEditor.SetCurrentOpenedPath(RESOURCES_DIR"/Untitled");
+
+		Log::Warning("{}", m_ChosenPalette);
 	}
 
 	MainWindow::~MainWindow()
@@ -165,19 +202,16 @@ namespace IDE
 					selectedFont = ide->m_ActiveFont;
 					pixelSize = ide->m_ActiveFontSize;
 				}
-
 				Util::EndGroupPanel();
 			}
 		));
 
 		m_Settings.push_back(std::make_pair(
-			"Second Screen",
+			"Test Panal",
 			[](MainWindow* ide)
 			{
-				ImGui::Separator();
 				Util::BeginGroupPanel("Test Panal");
 				ImGui::TextUnformatted("hello, world second thing");
-
 				Util::EndGroupPanel();
 			}
 		));
@@ -188,17 +222,38 @@ namespace IDE
 			{
 				Util::BeginGroupPanel("Text Editor Palette");
 				static int currentItem = 0;
-				static int lastItemChosen = -1;
-				ImGui::Combo("Color Palette", &currentItem, "Dark Palette\0Light Palette\0Retro Blue Palette\0");
+				static int lastItemChosen = 0;
+				ImGui::Text("Active Palette: %s", ide->m_ChosenPalette.c_str());
+				ImGui::Combo("##palleteChoiceCombo", &currentItem, "Dark Palette\0Light Palette\0Retro Blue Palette\0");
 				if (lastItemChosen != currentItem)
 				{
-					static IDE::TextEditor::Palette palettes[3] = {TextEditor::GetDarkPalette(), TextEditor::GetLightPalette(), TextEditor::GetRetroBluePalette()};
+					// static IDE::TextEditor::Palette palettes[3] = {TextEditor::GetDarkPalette(), TextEditor::GetLightPalette(), TextEditor::GetRetroBluePalette()};
 					lastItemChosen = currentItem;
-					ide->m_TextEditor.SetPalette(palettes[currentItem]);
+					switch (currentItem)
+					{
+						case 0:
+							ide->m_TextEditor.SetPalette(TextEditor::GetDarkPalette());
+							ide->m_ChosenPalette = "Dark Palette";
+						break;
+						case 1:
+							ide->m_TextEditor.SetPalette(TextEditor::GetLightPalette());
+							ide->m_ChosenPalette = "Light Palette";
+						break;
+						case 2:
+							ide->m_TextEditor.SetPalette(TextEditor::GetRetroBluePalette());
+							ide->m_ChosenPalette = "Retro Blue Palette";
+						break;
+						default:
+							ide->m_TextEditor.SetPalette(TextEditor::GetDarkPalette());
+							ide->m_ChosenPalette = "Dark Palette";
+					}
+					// ide->m_TextEditor.SetPalette(palettes[currentItem]);
+
 				}
 				static bool openedEditor = false;
 				if (ImGuiAl::Button("Open Palette Editor##1", !openedEditor))
 					openedEditor = true;
+				Util::EndGroupPanel();
 				if (openedEditor)
 				{
 					static 	ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking
@@ -248,54 +303,20 @@ namespace IDE
 
 							init = true;
 						}
-						static std::vector<std::string> titles= {
-							"Default"
-							,"Keyword"
-							,"Number"
-							,"String"
-							,"Char literal"
-							,"Punctuation"
-							,"Preprocessor"
-							,"Identifier"
-							,"Known identifier"
-							,"Preproc identifier"
-							,"Comment (single line)"
-							,"Comment (multi line)"
-							,"Background"
-							,"Cursor"
-							,"Selection"
-							,"ErrorMarker"
-							,"Breakpoint"
-							,"Breakpoint outline"
-							,"Current line indicator"
-							,"Current line indicator outline"
-							,"Line number"
-							,"Current line fill"
-							,"Current line fill (inactive)"
-							,"Current line edge"
-							,"Error message"
-							,"BreakpointDisabled"
-							,"UserFunction"
-							,"UserType"
-							,"UniformType"
-							,"GlobalVariable"
-							,"LocalVariable"
-							,"FunctionArgument"
-						};
 
-						for(int i = 0; i < (int)32; i++)
+						for(size_t i = 0; i < p.size(); i++)
 						{
-							std::string title = titles[i] + "###" +  std::to_string(i);
+							std::string title = paletteNames[i] + "###" +  std::to_string(i);
 							ImGui::ColorEdit3(title.c_str(), &cols[i].Value.x);
 
 							uint32_t color = cols[i];
 							p[i] = color;
 						}
 						ide->m_TextEditor.SetPalette(p);
+						ide->m_ChosenPalette = "Custom";
 					}
 					ImGui::End();
 				}
-				Util::EndGroupPanel();
 			}
 		));
 	}
@@ -576,6 +597,33 @@ namespace IDE
 				m_ActiveFontSize = std::clamp(m_ActiveFontSize, 18, 48);
 				m_ActiveFontSize = (m_ActiveFontSize % 2) ? m_ActiveFontSize + 1: m_ActiveFontSize;
 			}
+			else if (parsedLine.type == "PaletteData")
+			{
+				if (Util::IsInteger(parsedLine.data.c_str()))
+				{
+					uint32_t size = stoi(parsedLine.data);
+					IDE::TextEditor::Palette p;
+					for (uint32_t i = 0; i < size; i++)
+					{
+						std::getline(inputFile, line);
+						size_t index = line.find(":");
+						line = line.substr(index + 2);
+						p[i] = Util::GetInteger(line.c_str(), (uint32_t)line.size());
+					}
+					m_TextEditor.SetPalette(p);
+					m_ChosenPalette = "Custom";
+				}
+				else
+				{
+					if (parsedLine.data == "Dark Palette")
+						m_TextEditor.SetPalette(TextEditor::GetDarkPalette());
+					else if (parsedLine.data == "Light Palette")
+						m_TextEditor.SetPalette(TextEditor::GetLightPalette());
+					else if (parsedLine.data == "Retro Blue Palette")
+						m_TextEditor.SetPalette(TextEditor::GetRetroBluePalette());
+					m_ChosenPalette = parsedLine.data;
+				}
+			}
 		}
 	}
 
@@ -589,7 +637,19 @@ namespace IDE
 		}
 		outputFile << "Font: " << m_ActiveFont << '\n';
 		outputFile << "FontSize: " << m_ActiveFontSize << '\n';
-
+		outputFile << "PaletteData: ";
+		if (m_ChosenPalette == "Custom")
+		{
+			auto palette = m_TextEditor.GetPalette();
+			outputFile << palette.size() << '\n';
+			for (size_t i = 0; i < palette.size(); i++)
+				outputFile << '\t' << paletteNames[i] << " : 0x" << std::setfill('0') << std::setw(8) << std::hex << palette[i] << '\n';
+			std::cout << std::setfill(' ');
+		}
+		else
+		{
+			outputFile << m_ChosenPalette << '\n';
+		}
 		Log::Success("Saved data to the config file: {}", g_SaveFile);
 	}
 

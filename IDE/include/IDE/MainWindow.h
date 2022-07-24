@@ -70,6 +70,7 @@ namespace IDE
 		const std::string m_RegisterFileWindowName;
 		const std::string m_LogWindowName;
 		std::string m_WorkSpaceDir;
+		std::string m_ChosenPalette;
 
 		bool m_LayoutInitialized;
 		bool m_ConfigOpened;

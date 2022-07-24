@@ -13,91 +13,12 @@
 #include <RISC/DataSectionContainer.h>
 
 #include <Utils/Logger.h>
+#include <Utils/Functions.h>
 
 typedef Util::Logger Log;
 
 namespace Parser
 {
-
-	inline static bool IsInteger(const char *value)
-	{
-		bool hex = false;
-		bool isBinary = false;
-		bool isNegative = value[0] == '-';
-
-		if (value[0 + isNegative] == '0' && tolower(value[1 + isNegative]) == 'x')
-			hex = true;
-		else if (value[0 + isNegative] == '0' && tolower(value[1 + isNegative]) == 'b')
-			isBinary = true;
-
-		uint32_t start = (hex || isBinary) ? 2 : 0;
-		start += isNegative;
-		for (auto p = value + start; *p != '\0'; p++)
-		{
-			char c = *p;
-			c = tolower(c);
-			if (isBinary)
-			{
-				if (!(c == '0' || c == '1'))
-					return false;
-			}
-			else if (hex == true)
-			{
-				if (!isdigit(c) && (c > 'f' || c < 'a'))
-					return false;
-			}
-			else
-			{
-				if (!isdigit(c))
-					return false;
-			}
-		}
-		return true;
-	}
-
-	inline static uint32_t GetInteger(const char *imm, uint32_t size)
-	{
-		uint32_t sum = 0;
-		uint32_t base = 10;
-		uint32_t pos = 0;
-		bool isHex = false;
-		bool isBinary = false;
-		bool isNegative = imm[0] == '-';
-		if (imm[0 + isNegative] == '0' && tolower(imm[1 + isNegative]) == 'x')
-		{
-			base = 16;
-			isHex = true;
-		}
-		if (imm[0 + isNegative] == '0' && tolower(imm[1 + isNegative]) == 'b')
-		{
-			base = 2;
-			isBinary = true;
-		}
-		int32_t start = (isHex || isBinary) ? 2 : 0;
-		start += isNegative;
-		for (int32_t i = size - 1; i >= start; i--)
-		{
-			char c = imm[i];
-			if (c == '\0')
-				continue;
-			c = tolower(c);
-
-			uint32_t value = c - '0';
-			if (isHex)
-			{
-				if (isalpha(c))
-					value = c - 'a' + 10;
-			}
-
-			sum += value * (uint32_t)pow(base, pos);
-			pos++;
-		}
-
-		if (isNegative)
-			sum *= -1;
-		return sum;
-	}
-
 	Parser::Parser()
 		: m_FileContent("")
 	{
@@ -358,7 +279,7 @@ namespace Parser
 			}
 			else if (directive == ".word" || directive == ".half" || directive == ".byte")
 			{
-				// TODO: Use IsInteger function here to support the other integer types :D
+				// TODO: Use Util::IsInteger function here to support the other integer types :D
 				//  It is either a comma seperated values or a space seperated ones.
 				//  So we will remove all the commas and make sure it is only spaces
 
@@ -377,7 +298,7 @@ namespace Parser
 				while (spaceIndex != std::string::npos)
 				{
 					std::string num = data.substr(lastIndex, spaceIndex - lastIndex);
-					if (!IsInteger(num.c_str()))
+					if (!Util::IsInteger(num.c_str()))
 					{
 						return ErrorMessage{ErrorMessage::INVALID_DIRECTIVE_DATA, "Invalid directive data. Number is not integer: %s", num.c_str()};
 					}
@@ -402,7 +323,7 @@ namespace Parser
 				while (spaceIndex != std::string::npos)
 				{
 					std::string num = data.substr(lastIndex, spaceIndex - lastIndex);
-					if (!IsInteger(num.c_str()))
+					if (!Util::IsInteger(num.c_str()))
 					{
 						return ErrorMessage{ErrorMessage::INVALID_DIRECTIVE_DATA, "Invalid directive data. Number is not integer: %s", num.c_str()};
 					}
@@ -490,7 +411,7 @@ namespace Parser
 			}
 			else
 			{
-				arr[i] = (uint32_t)GetInteger(number.c_str(), (uint32_t)number.size());
+				arr[i] = (uint32_t)Util::GetInteger(number.c_str(), (uint32_t)number.size());
 			}
 
 			lastIndex = space + 1;
@@ -688,7 +609,7 @@ namespace Parser
 						return;
 					}
 					std::string rdString = RegisterFile::GetTrueRegName(rd);
-					if (rdString == "INVALID" || !IsInteger(imm))
+					if (rdString == "INVALID" || !Util::IsInteger(imm))
 					{
 						output.err = {ErrorMessage::INVALID_PARAMETERS, "Invalid format, instruction: %s", name.c_str()};
 						return;
@@ -696,7 +617,7 @@ namespace Parser
 					uint32_t finalRD;
 					sscanf(rdString.c_str(), "%*[Xx]%d", &finalRD);
 
-					uint32_t finalIMM = GetInteger(imm, 16);
+					uint32_t finalIMM = Util::GetInteger(imm, 16);
 					inst.imm = finalIMM;
 					inst.rd = finalRD;
 					output.instructions.push_back(inst);
@@ -712,7 +633,7 @@ namespace Parser
 					}
 					std::string rdString = RegisterFile::GetTrueRegName(rd);
 					std::string rs1String = RegisterFile::GetTrueRegName(rs1);
-					if (rdString == "INVALID" || rs1String == "INVALID" || !IsInteger(imm))
+					if (rdString == "INVALID" || rs1String == "INVALID" || !Util::IsInteger(imm))
 					{
 						output.err = {ErrorMessage::INVALID_PARAMETERS, "Invalid format, instruction: %s", name.c_str()};
 						return;
@@ -721,7 +642,7 @@ namespace Parser
 					sscanf(rdString.c_str(), "%*[Xx]%d", &finalRD);
 					sscanf(rs1String.c_str(), "%*[Xx]%d", &finalRS1);
 
-					uint32_t finalIMM = GetInteger(imm, 16);
+					uint32_t finalIMM = Util::GetInteger(imm, 16);
 					inst.imm = finalIMM;
 					inst.rd = finalRD;
 					inst.rs1 = finalRS1;
@@ -738,7 +659,7 @@ namespace Parser
 					}
 					std::string rs1String = RegisterFile::GetTrueRegName(rs1);
 					std::string rs2String = RegisterFile::GetTrueRegName(rs2);
-					if (rs1String == "INVALID" || rs2String == "INVALID" || !IsInteger(imm))
+					if (rs1String == "INVALID" || rs2String == "INVALID" || !Util::IsInteger(imm))
 					{
 						output.err = {ErrorMessage::INVALID_PARAMETERS, "Invalid format, instruction: %s", name.c_str()};
 						return;
@@ -746,7 +667,7 @@ namespace Parser
 					uint32_t finalRS1, finalRS2;
 					sscanf(rs1String.c_str(), "%*[Xx]%d", &finalRS1);
 					sscanf(rs2String.c_str(), "%*[Xx]%d", &finalRS2);
-					uint32_t finalIMM = GetInteger(imm, 16);
+					uint32_t finalIMM = Util::GetInteger(imm, 16);
 
 					inst.rs1 = finalRS1;
 					inst.rs2 = finalRS2;
@@ -791,7 +712,7 @@ namespace Parser
 					}
 					std::string rdString = RegisterFile::GetTrueRegName(rd);
 					std::string rs1String = RegisterFile::GetTrueRegName(rs1);
-					if (rs1String == "INVALID" || rdString == "INVALID" || !IsInteger(imm))
+					if (rs1String == "INVALID" || rdString == "INVALID" || !Util::IsInteger(imm))
 					{
 						output.err = {ErrorMessage::INVALID_PARAMETERS, "Invalid format, instruction: %s", name.c_str()};
 						return;
@@ -800,7 +721,7 @@ namespace Parser
 
 					sscanf(rdString.c_str(), "%*[Xx]%d", &finalRD);
 					sscanf(rs1String.c_str(), "%*[Xx]%d", &finalRS1);
-					finalIMM = GetInteger(imm, 16);
+					finalIMM = Util::GetInteger(imm, 16);
 
 					inst.rd = finalRD;
 					inst.rs1 = finalRS1;
@@ -823,7 +744,7 @@ namespace Parser
 					}
 					std::string rs1String = RegisterFile::GetTrueRegName(rs1);
 					std::string rs2String = RegisterFile::GetTrueRegName(rs2);
-					if (rs1String == "INVALID" || rs2String == "INVALID" || !IsInteger(imm))
+					if (rs1String == "INVALID" || rs2String == "INVALID" || !Util::IsInteger(imm))
 					{
 						output.err = {ErrorMessage::INVALID_PARAMETERS, "Invalid format, instruction: %s", name.c_str()};
 						return;
@@ -832,7 +753,7 @@ namespace Parser
 
 					sscanf(rs1String.c_str(), "%*[Xx]%d", &finalRS1);
 					sscanf(rs2String.c_str(), "%*[Xx]%d", &finalRS2);
-					finalIMM = GetInteger(imm, 16);
+					finalIMM = Util::GetInteger(imm, 16);
 
 					inst.rs1 = finalRS1;
 					inst.rs2 = finalRS2;

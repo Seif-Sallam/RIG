@@ -126,4 +126,83 @@ namespace Util
 
 		ImGui::EndGroup();
 	}
+
+	bool IsInteger(const char *value)
+	{
+		bool hex = false;
+		bool isBinary = false;
+		bool isNegative = value[0] == '-';
+
+		if (value[0 + isNegative] == '0' && tolower(value[1 + isNegative]) == 'x')
+			hex = true;
+		else if (value[0 + isNegative] == '0' && tolower(value[1 + isNegative]) == 'b')
+			isBinary = true;
+
+		uint32_t start = (hex || isBinary) ? 2 : 0;
+		start += isNegative;
+		for (auto p = value + start; *p != '\0'; p++)
+		{
+			char c = *p;
+			c = tolower(c);
+			if (isBinary)
+			{
+				if (!(c == '0' || c == '1'))
+					return false;
+			}
+			else if (hex == true)
+			{
+				if (!isdigit(c) && (c > 'f' || c < 'a'))
+					return false;
+			}
+			else
+			{
+				if (!isdigit(c))
+					return false;
+			}
+		}
+		return true;
+	}
+
+	uint32_t GetInteger(const char *imm, uint32_t size)
+	{
+		uint32_t sum = 0;
+		uint32_t base = 10;
+		uint32_t pos = 0;
+		bool isHex = false;
+		bool isBinary = false;
+		bool isNegative = imm[0] == '-';
+		if (imm[0 + isNegative] == '0' && tolower(imm[1 + isNegative]) == 'x')
+		{
+			base = 16;
+			isHex = true;
+		}
+		if (imm[0 + isNegative] == '0' && tolower(imm[1 + isNegative]) == 'b')
+		{
+			base = 2;
+			isBinary = true;
+		}
+		int32_t start = (isHex || isBinary) ? 2 : 0;
+		start += isNegative;
+		for (int32_t i = size - 1; i >= start; i--)
+		{
+			char c = imm[i];
+			if (c == '\0')
+				continue;
+			c = tolower(c);
+
+			uint32_t value = c - '0';
+			if (isHex)
+			{
+				if (isalpha(c))
+					value = c - 'a' + 10;
+			}
+
+			sum += value * (uint32_t)pow(base, pos);
+			pos++;
+		}
+
+		if (isNegative)
+			sum *= -1;
+		return sum;
+	}
 }

@@ -17,4 +17,7 @@ namespace Util
 
 	void BeginGroupPanel(const char* name, const ImVec2& size = ImVec2(0.0f, 0.0f));
 	void EndGroupPanel();
+
+	bool IsInteger(const char *value);
+	uint32_t GetInteger(const char *imm, uint32_t size);
 }
