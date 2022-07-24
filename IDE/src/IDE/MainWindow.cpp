@@ -181,6 +181,123 @@ namespace IDE
 				Util::EndGroupPanel();
 			}
 		));
+
+		m_Settings.push_back(std::make_pair(
+			"Text Editor Palette",
+			[](MainWindow* ide)
+			{
+				Util::BeginGroupPanel("Text Editor Palette");
+				static int currentItem = 0;
+				static int lastItemChosen = -1;
+				ImGui::Combo("Color Palette", &currentItem, "Dark Palette\0Light Palette\0Retro Blue Palette\0");
+				if (lastItemChosen != currentItem)
+				{
+					static IDE::TextEditor::Palette palettes[3] = {TextEditor::GetDarkPalette(), TextEditor::GetLightPalette(), TextEditor::GetRetroBluePalette()};
+					lastItemChosen = currentItem;
+					ide->m_TextEditor.SetPalette(palettes[currentItem]);
+				}
+				static bool openedEditor = false;
+				if (ImGuiAl::Button("Open Palette Editor##1", !openedEditor))
+					openedEditor = true;
+				if (openedEditor)
+				{
+					static 	ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking
+												   | ImGuiWindowFlags_AlwaysAutoResize;
+					ImGui::Begin("Palette Editor###2", &openedEditor, flags);
+					{
+						static TextEditor::Palette p = {
+							0xffff0000,	// "Default"
+							0xffd69c56,	// "Keyword"
+							0xff00ff00,	// "Number"
+							0xff7070e0,	// "String"
+							0xff70a0e0, // "Char literal"
+							0xffffffff, // "Punctuation"
+							0xff408080,	// "Preprocessor"
+							0xffaaaaaa, // "Identifier"
+							0xff9bc64d, // "Known identifier"
+							0xffc040a0, // "Preproc identifier"
+							0xff206020, // "Comment (single line)"
+							0xff406020, // "Comment (multi line)"
+							0xff101010, // "Background"
+							0xffe0e0e0, // "Cursor"
+							0x80a06020, // "Selection"
+							0x800020ff, // "ErrorMarker"
+							0xff0000ff, // "Breakpoint"
+							0xffffffff, // "Breakpoint outline"
+							0xFF1DD8FF, // "Current line indicator"
+							0xFF696969, // "Current line indicator outline"
+							0xff707000, // "Line number"
+							0x40000000, // "Current line fill"
+							0x40808080, // "Current line fill (inactive)"
+							0x40a0a0a0, // "Current line edge"
+							0xff33ffff, // "Error message"
+							0xffffffff, // "BreakpointDisabled"
+							0xffaaaaaa, // "UserFunction"
+							0xffb0c94e, // "UserType"
+							0xffaaaaaa, // "UniformType"
+							0xffaaaaaa, // "GlobalVariable"
+							0xffaaaaaa, // "LocalVariable"
+							0xff888888	// "FunctionArgument"
+						};
+						static ImColor cols[32];
+						static bool init = false;
+						if(!init)
+						{
+							for(int i =0 ;i < 32; i++)
+								cols[i] = p[i];
+
+							init = true;
+						}
+						static std::vector<std::string> titles= {
+							"Default"
+							,"Keyword"
+							,"Number"
+							,"String"
+							,"Char literal"
+							,"Punctuation"
+							,"Preprocessor"
+							,"Identifier"
+							,"Known identifier"
+							,"Preproc identifier"
+							,"Comment (single line)"
+							,"Comment (multi line)"
+							,"Background"
+							,"Cursor"
+							,"Selection"
+							,"ErrorMarker"
+							,"Breakpoint"
+							,"Breakpoint outline"
+							,"Current line indicator"
+							,"Current line indicator outline"
+							,"Line number"
+							,"Current line fill"
+							,"Current line fill (inactive)"
+							,"Current line edge"
+							,"Error message"
+							,"BreakpointDisabled"
+							,"UserFunction"
+							,"UserType"
+							,"UniformType"
+							,"GlobalVariable"
+							,"LocalVariable"
+							,"FunctionArgument"
+						};
+
+						for(int i = 0; i < (int)32; i++)
+						{
+							std::string title = titles[i] + "###" +  std::to_string(i);
+							ImGui::ColorEdit3(title.c_str(), &cols[i].Value.x);
+
+							uint32_t color = cols[i];
+							p[i] = color;
+						}
+						ide->m_TextEditor.SetPalette(p);
+					}
+					ImGui::End();
+				}
+				Util::EndGroupPanel();
+			}
+		));
 	}
 #pragma endregion
 
@@ -493,6 +610,7 @@ namespace IDE
 
 #pragma endregion
 
+#pragma region Helpers
 	// Fills lps[] for given patttern pat[0..M-1]
 	inline static void computeLPSArray(char* pat, int M, int* lps)
 	{
@@ -528,6 +646,7 @@ namespace IDE
 			}
 		}
 	}
+
 
 	// Prints occurrences of txt[] in pat[]
 	inline static bool KMPSearch(char* pat, char* txt)
@@ -567,6 +686,10 @@ namespace IDE
 		}
 		return false;
 	}
+
+#pragma endregion
+
+#pragma region Logic
 
 	void MainWindow::ConfigWindow()
 	{
@@ -608,95 +731,6 @@ namespace IDE
 		ImGui::Begin(m_RegisterFileWindowName.c_str());
 		{
 			ImGui::TextUnformatted("Register File Window Text");
-
-		static TextEditor::Palette p= {
-			0xffff0000,	// "Default"
-			0xffd69c56,	// "Keyword"
-			0xff00ff00,	// "Number"
-			0xff7070e0,	// "String"
-			0xff70a0e0, // "Char literal"
-			0xffffffff, // "Punctuation"
-			0xff408080,	// "Preprocessor"
-			0xffaaaaaa, // "Identifier"
-			0xff9bc64d, // "Known identifier"
-			0xffc040a0, // "Preproc identifier"
-			0xff206020, // "Comment (single line)"
-			0xff406020, // "Comment (multi line)"
-			0xff101010, // "Background"
-			0xffe0e0e0, // "Cursor"
-			0x80a06020, // "Selection"
-			0x800020ff, // "ErrorMarker"
-			0xff0000ff, // "Breakpoint"
-			0xffffffff, // "Breakpoint outline"
-			0xFF1DD8FF, // "Current line indicator"
-			0xFF696969, // "Current line indicator outline"
-			0xff707000, // "Line number"
-			0x40000000, // "Current line fill"
-			0x40808080, // "Current line fill (inactive)"
-			0x40a0a0a0, // "Current line edge"
-			0xff33ffff, // "Error message"
-			0xffffffff, // "BreakpointDisabled"
-			0xffaaaaaa, // "UserFunction"
-			0xffb0c94e, // "UserType"
-			0xffaaaaaa, // "UniformType"
-			0xffaaaaaa, // "GlobalVariable"
-			0xffaaaaaa, // "LocalVariable"
-			0xff888888	// "FunctionArgument"
-		};
-		static ImColor cols[32];
-		static bool init = false;
-		if(!init)
-		{
-			for(int i =0 ;i < 32; i++)
-				cols[i] = p[i];
-
-			init = true;
-		}
-		static std::vector<std::string> titles= {
-			 "Default"
-			,"Keyword"
-			,"Number"
-			,"String"
-			,"Char literal"
-			,"Punctuation"
-			,"Preprocessor"
-			,"Identifier"
-			,"Known identifier"
-			,"Preproc identifier"
-			,"Comment (single line)"
-			,"Comment (multi line)"
-			,"Background"
-			,"Cursor"
-			,"Selection"
-			,"ErrorMarker"
-			,"Breakpoint"
-			,"Breakpoint outline"
-			,"Current line indicator"
-			,"Current line indicator outline"
-			,"Line number"
-			,"Current line fill"
-			,"Current line fill (inactive)"
-			,"Current line edge"
-			,"Error message"
-			,"BreakpointDisabled"
-			,"UserFunction"
-			,"UserType"
-			,"UniformType"
-			,"GlobalVariable"
-			,"LocalVariable"
-			,"FunctionArgument"
-		};
-
-		for(int i = 0; i < (int)32; i++)
-		{
-			std::string title = titles[i] + "###" +  std::to_string(i);
-			ImGui::ColorEdit3(title.c_str(), &cols[i].Value.x);
-
-			uint32_t color = cols[i];
-			p[i] = color;
-		}
-		m_TextEditor.SetPalette(p);
-
 		}
 		ImGui::End();
 	}
@@ -727,6 +761,9 @@ namespace IDE
 			ImGui::End();
 		}
 	}
+#pragma endregion
+
+#pragma region GLFW_Callbacks
 
 	void ViewPortResizeCallback(GLFWwindow *window, int width, int height)
 	{
@@ -744,4 +781,7 @@ namespace IDE
 	{
 		fputs(description, stderr);
 	}
+
+#pragma endregion
+
 }
