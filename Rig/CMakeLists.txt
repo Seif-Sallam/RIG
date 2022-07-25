@@ -4,13 +4,13 @@ set(SOURCES
 	./src/Rig/main.cpp)
 
 add_executable(
-	RIG
+	Rig
 	${SOURCES}
 	${HEADERS}
 )
 
 target_include_directories(
-	RIG
+	Rig
 	PRIVATE
 	./include/
 	../Parser/include/
@@ -19,7 +19,7 @@ target_include_directories(
 	../Utils/include
 )
 
-target_link_libraries(RIG
+target_link_libraries(Rig
 	PRIVATE
 	RISC
 	Parser
@@ -27,7 +27,7 @@ target_link_libraries(RIG
 	Utils
 )
 
-target_compile_definitions(RIG
+target_compile_definitions(Rig
 	PRIVATE
 	RESOURCES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/resources"
 )
