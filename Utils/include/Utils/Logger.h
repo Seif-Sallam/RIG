@@ -22,9 +22,11 @@ namespace Util
 			{
 				int oldSize = m_Buf.size();
 				int color = 0xFFFFFFFF;
+				
 				std::string msg = fmt::format(fmt, std::forward<ArgsType>(args)...);
 				msg = fmt::format("{}{}\n", "[Debug] ", msg);
 				fmt::print(fg(fmt::color::white), "{}", msg);
+				
 				m_Buf.append(msg.c_str());
 				AddOffset(oldSize, color);
 			}
@@ -37,9 +39,11 @@ namespace Util
 			{
 				int oldSize = m_Buf.size();
 				int color = 0xFFee0000;
+				
 				std::string msg = fmt::format(fmt, std::forward<ArgsType>(args)...);
 				msg = fmt::format("{}{}\n", "[Info] ", msg);
 				fmt::print(fg(fmt::color::sky_blue), "{}", msg);
+
 				m_Buf.append(msg.c_str());
 				AddOffset(oldSize, color);
 			}
@@ -52,9 +56,12 @@ namespace Util
 			{
 				int oldSize = m_Buf.size();
 				int color = 0xFF0000FF;
+				
 				std::string msg = fmt::format(fmt, std::forward<ArgsType>(args)...);
 				msg = fmt::format("{}{}\n", "[Error] ", msg);
 				fmt::print(fg(fmt::color::red), "{}", msg);
+				
+				m_Buf.append(msg.c_str());
 				AddOffset(oldSize, color);
 			}
 		}
@@ -66,9 +73,11 @@ namespace Util
 			{
 				int oldSize = m_Buf.size();
 				int color = 0xFF00FF00;
+
 				std::string msg = fmt::format(fmt, std::forward<ArgsType>(args)...);
 				msg = fmt::format("{}{}\n", "[Success] ", msg);
 				fmt::print(fg(fmt::color::green), "{}", msg);
+				
 				m_Buf.append(msg.c_str());
 				AddOffset(oldSize, color);
 			}
@@ -81,9 +90,11 @@ namespace Util
 			{
 				int oldSize = m_Buf.size();
 				int color = 0xFF00FFFF;
+
 				std::string msg = fmt::format(fmt, std::forward<ArgsType>(args)...);
 				msg = fmt::format("{}{}\n", "[Warning] ", msg);
 				fmt::print(fg(fmt::color::yellow), "{}", msg);
+
 				m_Buf.append(msg.c_str());
 				AddOffset(oldSize, color);
 			}
@@ -112,7 +123,8 @@ namespace Util
 
 	private:
 		static void AddOffset(int oldSize, int color);
-		Logger() = default;
+		inline Logger() { ClearBuffer(); }
+		static Logger s_Instance;
 		static ImGuiTextBuffer m_Buf;
 		static ImGuiTextFilter m_Filter;
 		static ImVector<int> m_LineOffsets; // Index to lines offset. We maintain this with AddLog() calls.

@@ -23,7 +23,7 @@ int main(int argc, const char *argv[])
 	Log::Error("Hello, World! {}", "Error");
 	Log::Success("Hello, World! {}", "Success");
 
-	if (true)
+	if (false)
 	{
 		const std::string filePath = std::string(RESOURCES_DIR) + std::string("/testfile.txt");
 		Parser::Parser parser;

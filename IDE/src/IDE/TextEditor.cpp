@@ -4216,9 +4216,17 @@ namespace IDE
 							}
 						}
 					}
-					line[currentIndex].mPreprocessor = withinPreproc;
-					currentIndex += UTF8CharLength(c);
-					if (currentIndex >= (int)line.size())
+					if (currentIndex < (int)line.size()) 
+					{
+						line[currentIndex].mPreprocessor = withinPreproc;
+						currentIndex += UTF8CharLength(c);
+						if (currentIndex >= (int)line.size())
+						{
+							currentIndex = 0;
+							++currentLine;
+						}
+					}
+					else
 					{
 						currentIndex = 0;
 						++currentLine;
@@ -4378,15 +4386,21 @@ namespace IDE
 	static bool TokenizeCStyleString(const char *in_begin, const char *in_end, const char *&out_begin, const char *&out_end)
 	{
 		const char *p = in_begin;
-
-		if (*p == '"')
+		bool quote = false;
+		if (*p == '"' || *p == '\'')
 		{
+			quote = (*p == '"');
 			p++;
 
 			while (p < in_end)
 			{
+				bool end = false;
+				if (quote && *p == '"' && *(p - 1) != '\\')
+					end = true;
+				if (!quote && *p == '\'' && *(p - 1) != '\\')
+					end = true;
 				// handle end of string
-				if (*p == '"')
+				if(end)
 				{
 					out_begin = in_begin;
 					out_end = p + 1;
@@ -4394,9 +4408,8 @@ namespace IDE
 				}
 
 				// handle escape character for "
-				if (*p == '\\' && p + 1 < in_end && p[1] == '"')
-					p++;
-
+				//if (*p == '\\' && p + 1 < in_end && p[1] == '"')
+					//p++;
 				p++;
 			}
 		}
@@ -4755,8 +4768,8 @@ namespace IDE
 				}
 				else if (TokenizeCStyleString(in_begin, in_end, out_begin, out_end))
 					paletteIndex = PaletteIndex::String;
-				else if (TokenizeCStyleCharacterLiteral(in_begin, in_end, out_begin, out_end))
-					paletteIndex = PaletteIndex::CharLiteral;
+				//else if (TokenizeCStyleCharacterLiteral(in_begin, in_end, out_begin, out_end))
+					//paletteIndex = PaletteIndex::CharLiteral;
 				else if (tokenizeRiscIdentifier(in_begin, in_end, out_begin, out_end))
 					paletteIndex = PaletteIndex::Identifier;
 				else if (tokenizeRiscKeyword(in_begin, in_end, out_begin, out_end))

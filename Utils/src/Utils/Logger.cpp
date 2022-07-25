@@ -13,7 +13,8 @@ namespace Util
 	ImVector<int> Logger::m_Colors{};
 	bool Logger::enabled = true;
 	bool Logger::m_AutoScroll = true;
-
+	Logger Logger::s_Instance{};
+	
 	void Logger::AddOffset(int oldSize, int color)
 	{
 		for (int newSize = m_Buf.size(); oldSize < newSize; oldSize++)
@@ -31,8 +32,8 @@ namespace Util
 	{
 		m_LineOffsets.clear();
 		m_Buf.clear();
-		m_LineOffsets.push_back(0);
-		m_Colors.push_back(0xff000000);
+		m_Colors.clear();
+		Info("Initializing Logger");
 	}
 
 	void Logger::Draw(std::string_view title, bool *p_open, ImGuiWindowFlags flags)
@@ -90,7 +91,8 @@ namespace Util
 			{
 				for (int line_no = clipper.DisplayStart; line_no < clipper.DisplayEnd; line_no++)
 				{
-					const char *line_start = buf + m_LineOffsets[line_no];
+					int offset = (false) ? 0 : m_LineOffsets[line_no];
+					const char *line_start = buf + offset;
 					const char *line_end = (line_no + 1 < m_LineOffsets.Size) ? (buf + m_LineOffsets[line_no + 1] - 1) : buf_end;
 					if (line_no + 1 >= m_Colors.Size)
 						ImGui::PushStyleColor(ImGuiCol_Text, ImU32(m_Colors[m_Colors.Size - 1]));
