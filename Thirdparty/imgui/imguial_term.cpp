@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <ctype.h>
+#include <algorithm>
 
 ImGuiAl::Fifo::Fifo(void *const buffer, size_t const size)
     : _buffer(buffer), _size(size), _available(size), _first(0), _last(0) {}

@@ -4738,11 +4738,12 @@ namespace IDE
 					return false;
 				};
 
-				static auto tokenizeRiscIdentifier = [](const char *in_begin, const char *in_end, const char *&out_begin, const char *&out_end)
+				auto tokenizeRiscIdentifier = [](const char *in_begin, const char *in_end, const char *&out_begin, const char *&out_end)
 				{
 					size_t size = in_end - in_begin;
-					for (auto &[name, identifier] : identifiers)
+					for (std::unordered_map<std::string, Identifier>::iterator it = identifiers.begin(); it != identifiers.end(); it++)
 					{
+						auto& name = it->first;
 						if (name.size() > size)
 							continue;
 						if (strncmp(name.c_str(), in_begin, std::min(name.size(), size)) == 0)
