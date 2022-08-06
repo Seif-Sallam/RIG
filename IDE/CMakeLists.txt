@@ -24,9 +24,10 @@ endif()
 
 target_link_libraries(IDE
 	PUBLIC
-	glad
-	glfw
-	glm
+	sfml-graphics
+    sfml-window
+    sfml-system
+    sfml-audio
 	imgui
 	Utils
 )

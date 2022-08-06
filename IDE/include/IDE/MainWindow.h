@@ -1,9 +1,6 @@
 #pragma once
 
-#include <glad/glad.h>
-#include <GL/gl.h>
-#include <GLFW/glfw3.h>
-#include <glm/glm.hpp>
+#include <SFML/Graphics.hpp>
 
 #include <iostream>
 #include <string>
@@ -58,7 +55,7 @@ namespace IDE
 		int32_t m_Width;
 		int32_t m_Height;
 
-		GLFWwindow *m_Window;
+		sf::RenderWindow* m_Window;
 		TextEditor m_TextEditor;
 		std::vector<TextEditor> m_Tabs;
 
@@ -74,6 +71,7 @@ namespace IDE
 
 		bool m_LayoutInitialized;
 		bool m_ConfigOpened;
+		bool m_IsMaximized;
 
 		std::vector<std::pair<std::string, void(*)(MainWindow*)>> m_Settings;
 	};

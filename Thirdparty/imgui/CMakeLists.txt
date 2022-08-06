@@ -19,7 +19,8 @@ endif()
 
 target_link_libraries(imgui
 	PRIVATE
-	glfw
-	glad
-	glm
+	sfml-graphics
+    sfml-window
+    sfml-system
+    sfml-audio
 )

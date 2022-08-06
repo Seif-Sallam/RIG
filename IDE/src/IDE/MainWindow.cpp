@@ -1,9 +1,8 @@
 #include <imgui.h>
-#include <imgui_impl_glfw.h>
-#include <imgui_impl_opengl3.h>
 
 #include "IDE/MainWindow.h"
 
+#include <imgui-SFML.h>
 #include <imguial_term.h>
 #include <imguial_button.h>
 #include <imgui_internal.h>
@@ -24,10 +23,6 @@ namespace IDE
 
 	using Log = Util::Logger;
 	static MainWindow* s_Instance = nullptr;
-
-	static void ErrorCallbackFunc(int error, const char *description);
-	static void KeyCallbackFunc(GLFWwindow *window, int key, int scancode, int action, int mods);
-	static void ViewPortResizeCallback(GLFWwindow *window, int width, int height);
 
 	static std::vector<std::string> paletteNames= {
 			"Default"
@@ -74,6 +69,7 @@ namespace IDE
 		, m_RegisterFileWindowName("Register File")
 		, m_ConfigOpened(false)
 		, m_LayoutInitialized(false)
+		, m_IsMaximized(true)
 		, m_ActiveFontSize(24)
 		, m_ActiveFont("Consolos")
 		, m_WorkSpaceDir(RESOURCES_DIR"/")
@@ -95,64 +91,31 @@ namespace IDE
 		m_TextEditor.SetCurrentOpenedPath(RESOURCES_DIR"/Untitled");
 
 		Log::Warning("{}", m_ChosenPalette);
+		ImGui::SFML::Init(*m_Window);
+
 	}
 
 	MainWindow::~MainWindow()
 	{
 		SaveState();
-
-		ImGui_ImplOpenGL3_Shutdown();
-		ImGui_ImplGlfw_Shutdown();
+		delete m_Window;
 		ImGui::DestroyContext();
-
-		glfwDestroyWindow(m_Window);
-		glfwTerminate();
 	}
 
 	void MainWindow::InitializeWindow()
 	{
-		if (!glfwInit())
-			exit(-1);
+		sf::VideoMode mode = sf::VideoMode::getFullscreenModes()[0];
+		m_Height = mode.height;
+		m_Width = mode.width;
 
-		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
-		glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-		glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-		glfwWindowHint(GLFW_MAXIMIZED, true);
+		m_Window = new sf::RenderWindow(sf::VideoMode(m_Width, m_Height), "RIG, v0.0.2", sf::Style::Default);
 
-		GLFWmonitor* monitor = glfwGetPrimaryMonitor();
-		auto mode = glfwGetVideoMode(monitor);
-		m_Height = mode->height;
-		m_Width = mode->width;
-
-		m_Window = glfwCreateWindow(m_Width, m_Height, "RIG v0.0.2", NULL, NULL);
-
+		// sf::RenderWindow win()
 		if (!m_Window)
 		{
 			fprintf(stderr, "Failed to open GLFW window.\n");
-			glfwTerminate();
 			exit(-1);
 		}
-
-		glfwMakeContextCurrent(m_Window);
-
-		if (!gladLoadGL())
-		{
-			fprintf(stderr, "Couldn't load glad\n");
-			glfwTerminate();
-			exit(-1);
-		}
-		const GLubyte *renderer = glGetString(GL_RENDERER);
-		const GLubyte *version = glGetString(GL_VERSION);
-		fprintf(stdout, "Renderer: %s\n", renderer);
-		fprintf(stdout, "OpenGL version supported %s\n", version);
-
-		glfwSetKeyCallback(m_Window, KeyCallbackFunc);
-
-		glClearColor(0.0, 0.0, 0.0, 1.0);
-
-		glfwSetFramebufferSizeCallback(m_Window, ViewPortResizeCallback);
-		glfwSwapInterval(1); // Enable vsync
 
 		// Setup Dear ImGui context
 		IMGUI_CHECKVERSION();
@@ -161,11 +124,7 @@ namespace IDE
 		ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
 		ImGui::StyleColorsDark();
-
-		ImGui_ImplGlfw_InitForOpenGL(m_Window, true);
-		ImGui_ImplOpenGL3_Init("#version 130");
 	}
-
 
 	void MainWindow::SetUpSettings()
 	{
@@ -326,15 +285,14 @@ namespace IDE
 
 	void MainWindow::Run()
 	{
-		while (!glfwWindowShouldClose(m_Window))
+		sf::Clock clk;
+		while (m_Window->isOpen())
 		{
+			sf::Time time = clk.restart();
 			HandleEvents();
 
 			Update();
-
-			ImGui_ImplOpenGL3_NewFrame();
-			ImGui_ImplGlfw_NewFrame();
-			ImGui::NewFrame();
+			ImGui::SFML::Update(*m_Window, time);
 
 			ImGui::PushFont(m_Fonts[m_ActiveFont][m_ActiveFontSize]);
 			{
@@ -349,7 +307,17 @@ namespace IDE
 
 	void MainWindow::HandleEvents()
 	{
-		glfwPollEvents();
+		sf::Event event;
+		while(m_Window->pollEvent(event))
+		{
+			ImGui::SFML::ProcessEvent(event);
+			switch(event.type)
+			{
+				case sf::Event::Closed:
+					m_Window->close();
+				break;
+			}
+		}
 	}
 
 	void MainWindow::ImGuiLayer()
@@ -367,12 +335,10 @@ namespace IDE
 
 	void MainWindow::Render()
 	{
-		glClearColor(0.3f, 0.3f, 0.3f, 0.0f);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		ImGui::Render();
-		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-
-		glfwSwapBuffers(m_Window);
+		const sf::Color clearClr(68, 68, 68, 255);
+		m_Window->clear(clearClr);
+		ImGui::SFML::Render(*m_Window);
+		m_Window->display();
 	}
 
 #pragma endregion
@@ -449,7 +415,7 @@ namespace IDE
 				if (ImGui::MenuItem("Quit", "Alt+F4"))
 				{
 					// We should close :D
-					glfwSetWindowShouldClose(m_Window, 1);
+					m_Window->close();
 				}
 
 				ImGui::EndMenu();
@@ -487,6 +453,25 @@ namespace IDE
 
 			if (ImGui::BeginMenu("View"))
 			{
+				bool currentValue = m_IsMaximized;
+				ImGui::Checkbox("Max screen", &m_IsMaximized);
+				if (currentValue != m_IsMaximized)
+				{
+					uint32_t width = m_Window->getSize().x;
+					uint32_t height = m_Window->getSize().y;
+					auto settings = m_Window->getSettings();
+			
+					switch(currentValue)
+					{
+						case false:
+							m_Window->close();
+							m_Window->create(sf::VideoMode(m_Width, m_Height), "Rig v0.0.2", sf::Style::Fullscreen, settings);
+						break;
+						case true:
+							m_Window->close();
+							m_Window->create(sf::VideoMode(width, height), "Rig v0.0.2", sf::Style::Default, settings);
+					}
+				}
 				if (ImGui::MenuItem("Dark palette"))
 					m_TextEditor.SetPalette(TextEditor::GetDarkPalette());
 				if (ImGui::MenuItem("Light palette"))
@@ -822,26 +807,4 @@ namespace IDE
 		}
 	}
 #pragma endregion
-
-#pragma region GLFW_Callbacks
-
-	void ViewPortResizeCallback(GLFWwindow *window, int width, int height)
-	{
-		s_Instance->SetWidth(width);
-		s_Instance->SetHeight(height);
-		glViewport(0, 0, width, height);
-	}
-	void KeyCallbackFunc(GLFWwindow *window, int key, int scancode, int action, int mods)
-	{
-		// close window when ESC has been pressed
-		// if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
-		// 	glfwSetWindowShouldClose(window, GL_TRUE);
-	}
-	void ErrorCallbackFunc(int error, const char *description)
-	{
-		fputs(description, stderr);
-	}
-
-#pragma endregion
-
 }
