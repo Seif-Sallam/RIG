@@ -2144,7 +2144,7 @@ namespace IGFD
 
 	void IGFD::FileManager::DrawPathComposer(const FileDialogInternal& vFileDialogInternal)
 	{
-		if (vFileDialogInternal.puDLGflags & ImGuiFileDialogFlags_HideResetButton == 0)
+		if ((vFileDialogInternal.puDLGflags & ImGuiFileDialogFlags_HideResetButton) == 0)
 		{	
 			if (IMGUI_BUTTON(resetButtonString))
 			{
