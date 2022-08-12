@@ -5,12 +5,22 @@
 
 namespace Util
 {
+	inline static void SanitizeFilePath(std::string& filePath)
+	{
+		for (int i = 0; i < filePath.size() - 1; i++)
+		{
+			if (filePath[i] == '\\')
+				filePath[i] = '/';
+		}
+		return;
+	}
+
 	inline static std::string RemovePrefix(const std::string& prefix, const std::string& str)
 	{
 		std::string copy = str;
 		size_t index = copy.find(prefix);
 		if(index == std::string::npos)
-			return "\0";
+			return str;
 		copy.erase(copy.begin() + index, copy.begin() + prefix.size() + index);
 		return copy;
 	}

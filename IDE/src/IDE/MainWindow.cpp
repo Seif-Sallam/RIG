@@ -8,6 +8,7 @@
 #include <imgui_internal.h>
 
 #include <fstream>
+#include <functional>
 
 #include <stdio.h>
 
@@ -15,6 +16,7 @@
 #include <Utils/Functions.h>
 
 #include <filesystem>
+#include <ImGuiFileDialog.h>
 
 namespace IDE
 {
@@ -326,6 +328,7 @@ namespace IDE
 		RegisterFileWindow();
 		LogWindow();
 		TextEditorWindow();
+		UpdateDialogs();
 	}
 
 	void MainWindow::Update()
@@ -400,6 +403,23 @@ namespace IDE
 		{
 			if (ImGui::BeginMenu("File"))
 			{
+				if (ImGui::MenuItem("Open File"))
+				{
+					auto function = [&](const std::string& filePathName, const std::string& filePath)
+					{
+						Log::Info("Reading the file: {}", filePathName);
+						if (!this->m_TextEditor.ReadFile(filePathName))
+							Log::Error("Could not open the file: {}", filePathName);
+						else
+						{
+							Log::Success("Read the file: {}", filePathName);
+							SetWorkSpaceDir(filePath);
+						}
+					};
+
+					this->OpenDialog("LoadFileDialog", "Load a new file", ".asm,.s,.S,.ASM", m_WorkSpaceDir, function,
+					1, nullptr, ImGuiFileDialogFlags_DisableCreateDirectoryButton | ImGuiFileDialogFlags_HideResetButton);
+				}
 				if (ImGui::MenuItem("Reset Layout"))
 				{
 					m_LayoutInitialized = false;
@@ -806,5 +826,49 @@ namespace IDE
 			ImGui::End();
 		}
 	}
+#pragma endregion
+
+#pragma region Dialog
+
+void MainWindow::OpenDialog(const std::string& key, const std::string& title, const char* filters, const std::string& filePathName, std::function<void(const std::string&, const std::string&)> function, int countSelectionMax, IGFD::UserDatas userData, ImGuiFileDialogFlags flags)
+{
+	ImGuiFileDialog::Instance()->OpenDialog(key, title, filters, filePathName, countSelectionMax, userData, flags);
+
+	m_DialogToUpdate[key] = function;
+}
+
+void MainWindow::UpdateDialogs()
+{
+	for (auto& dialog : m_DialogToUpdate)
+	{
+		if (ImGuiFileDialog::Instance()->Display(dialog.first, ImGuiWindowFlags_NoDocking, ImVec2(350, 300))) 
+		{
+			// action if OK
+			if (ImGuiFileDialog::Instance()->IsOk())
+			{
+				std::string filePathName = ImGuiFileDialog::Instance()->GetFilePathName();
+				std::string filePath = ImGuiFileDialog::Instance()->GetCurrentPath();
+				std::string fileName = ImGuiFileDialog::Instance()->GetCurrentFileName();
+				if (!fileName.empty())
+				{
+					// action
+					Util::SanitizeFilePath(filePathName);
+					Util::SanitizeFilePath(filePath);
+					dialog.second(filePathName, filePath);
+				}			
+			}
+
+			// close
+			ImGuiFileDialog::Instance()->Close();
+		}
+	}
+}
+
+void MainWindow::SetWorkSpaceDir(const std::string& dir)
+{
+	this->m_WorkSpaceDir = dir;
+	if (m_WorkSpaceDir.back() != '/')
+		m_WorkSpaceDir.push_back('/');
+}
 #pragma endregion
 }

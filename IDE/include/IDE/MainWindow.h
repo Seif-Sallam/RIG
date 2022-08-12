@@ -5,11 +5,13 @@
 #include <iostream>
 #include <string>
 #include <unordered_map>
+#include <functional>
+
 #include <imgui.h>
 #include <imguial_term.h>
+#include <ImGuiFileDialog.h>
 
 #include "IDE/TextEditor.h"
-
 namespace IDE
 {
 	class MainWindow
@@ -51,6 +53,10 @@ namespace IDE
 		void SettingsWindow();
 		void ConfigWindow();
 
+		void OpenDialog(const std::string& key, const std::string& title, const char* filters, const std::string& filePathName, 
+		std::function<void(const std::string&, const std::string&)> delegate, int countSelectionMax = 1, IGFD::UserDatas userData = (IGFD::UserDatas)nullptr, ImGuiFileDialogFlags flags = 0);
+		void UpdateDialogs();
+		void SetWorkSpaceDir(const std::string& dir);
 	private:
 		int32_t m_Width;
 		int32_t m_Height;
@@ -74,6 +80,9 @@ namespace IDE
 		bool m_IsMaximized;
 
 		std::vector<std::pair<std::string, void(*)(MainWindow*)>> m_Settings;
+
+		std::unordered_map<std::string, std::function<void(const std::string&, const std::string&)>> m_DialogToUpdate;
+
 	};
 
 
