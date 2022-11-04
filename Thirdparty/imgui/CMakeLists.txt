@@ -23,4 +23,5 @@ target_link_libraries(imgui
     sfml-window
     sfml-system
     sfml-audio
+	opengl32
 )
